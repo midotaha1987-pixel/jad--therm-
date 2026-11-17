@@ -1,6 +1,8 @@
 // Service worker لتطبيق جاد ثيرم — تخزين مؤقت للملفات الثابتة فقط،
 // وطلبات الـ API تمر للشبكة مباشرة (لا تُخزَّن).
-const CACHE = 'gadtherm-v1';
+// ملاحظة: عند أي تحديث لملفات التطبيق (app.js أو غيره) ارفع رقم النسخة هنا،
+// حتى يتحدّث التطبيق المثبّت عند المستخدمين — الكاش القديم لا يتحدّث من نفسه.
+const CACHE = 'gadtherm-v2';
 const CORE = ['/', '/index.html', '/style.css', '/app.js', '/manifest.json', '/icon-192.png', '/icon-512.png', '/icon.svg'];
 
 self.addEventListener('install', (e) => {
