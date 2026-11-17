@@ -45,8 +45,15 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      # GitHub-hosted runners already ship the full Android SDK (root-owned at
+      # /usr/local/lib/android/sdk). android-actions/setup-android@v3 fails on
+      # it (permission errors reinstalling over the preinstalled SDK), so use
+      # the preinstalled one directly instead.
+      - name: Use runner's preinstalled Android SDK
+        run: |
+          echo "ANDROID_HOME=${ANDROID_HOME:-/usr/local/lib/android/sdk}" >> "$GITHUB_ENV"
+          ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools"
+          ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}/platforms"
 
       - name: Build APK (debug)
         run: |
