@@ -161,15 +161,21 @@ async function vCoupons() {
   h += `<div class="card"><h2>الكوبونات</h2>${c.coupons.map(x => {
     const remaining = x.remaining_value != null ? x.remaining_value : x.value;
     const isOwner = x.owner_id === ME.id;
+    // المتبقي بعد التحويل بنسبة زيادة التأخير الحالية — يظهر مباشرة على الكارت
+    const bonus = x.bonus || { valuePct: 0, days: 0 };
+    const converted = Math.round(remaining * (1 + (bonus.valuePct || 0) / 100) * 100) / 100;
+    const canRedeem = x.status !== "redeemed" && (isOwner || ME.role === "admin");
     return `<div class="coupon"><code>${esc(x.code)}</code> — <b>${fmt(x.value)} ج</b> ${x.product ? "— " + esc(x.product) : ""}
     <span class="badge ${x.status === "redeemed" ? "grey" : x.status === "partial" ? "amber" : "green"}">${COUPON_STATUS_AR[x.status] || x.status}</span>
-    ${x.status === "partial" ? `<br>المتبقي: <b>${fmt(remaining)} ج</b> من ${fmt(x.value)} ج` : ""}
+    ${x.status === "partial" ? `<br>المتبقي: <b>${fmt(remaining)} ج</b> من ${fmt(x.value)} ج${bonus.valuePct > 0 ? ` — بعد زيادة التأخير (+${bonus.valuePct}%): <b>${fmt(converted)} ج</b>` : ""}` : ""}
     ${x.status === "redeemed" && x.redeemed_value ? `<br>تم صرف: <b>${fmt(x.redeemed_value)} ج</b>` : ""}
     <div id="qr-${x.id}" class="mt"></div>
     <div class="row mt">
       <button class="btn small" onclick="showQr(${x.id})">🔳 QR</button>
-      ${x.status !== "redeemed" && isOwner ? `<input type="number" id="redeemAmt${x.id}" value="${remaining}" min="1" max="${remaining}" step="1" style="max-width:120px" placeholder="مبلغ الصرف">
-      <button class="btn small green" onclick="redeemCoupon(${x.id})">💰 صرف (كلي أو جزئي)</button>` : ""}
+      ${canRedeem ? `<input type="number" id="redeemAmt${x.id}" min="1" max="${remaining}" step="1" style="max-width:120px" placeholder="المبلغ الجزئي">
+      <button class="btn small" onclick="redeemPart(${x.id}, ${remaining})">💰 صرف جزء من الكوبون</button>
+      ${x.status === "available" ? `<button class="btn small green" onclick="redeemAll(${x.id}, 'الإجمالي')">💰 صرف الإجمالي (${fmt(converted)} ج)</button>` : ""}
+      ${x.status === "partial" ? `<button class="btn small green" onclick="redeemAll(${x.id}, 'المتبقي')">💰 صرف المتبقي (${fmt(converted)} ج)</button>` : ""}` : ""}
       ${x.status !== "redeemed" && (isOwner || ME.role === "admin") ? `<select id="sendTo${x.id}" style="max-width:220px">${users.users.filter(u => u.id !== ME.id).map(u => `<option value="${u.id}">${esc(u.name)} (${ROLE_AR[u.role]})</option>`).join("")}</select>
       <button class="btn small" onclick="sendCoupon(${x.id})">إرسال</button>
       <button class="btn small" onclick="shareCouponWA(${x.id}, '${esc(x.code)}', ${x.value}, ${remaining})">📲 واتساب</button>` : ""}
@@ -217,6 +223,26 @@ async function shareCouponWA(id, code, value, remaining) {
   const text = `كوبون جاد ثيرم 🎟️\nالكود: ${code}\nالقيمة: ${value} ج${remaining < value ? `\nالمتبقي: ${remaining} ج` : ""}\nللاستبدال امسح QR أو افتح الرابط: ${r ? r.url : ""}`;
   window.open(waLink(phone, text), "_blank");
 }
+function showRedeemResult(r) {
+  const d = r.redeemed || {};
+  alert(`تم الصرف ${d.fully ? "بالكامل ✅" : "جزئيًا 💰"}\nالكوبون: ${d.code}\nالمبلغ المصروف: ${fmt(d.amount)} ج${d.valuePct > 0 ? `\nزيادة التأخير: +${d.valuePct}% (بعد ${d.days} يوم)` : ""}\nالمبلغ المستلم: ${fmt(d.payout)} ج${d.extraPoints > 0 ? `\nزيادة النقاط: +${fmt(d.extraPoints)} نقطة (+${d.pointsPct}%)` : ""}\nالمتبقي في الكوبون: ${fmt(d.remaining)} ج`);
+}
+// صرف جزء من الكوبون: المبلغ المكتوب في الخانة — لازم يكون أقل من المتبقي
+async function redeemPart(id, remaining) {
+  const amount = +(($("#redeemAmt" + id) || {}).value) || 0;
+  if (!amount || amount <= 0) { alert("اكتب المبلغ الجزئي المراد صرفه"); return; }
+  if (amount >= remaining) { alert("المبلغ ده يساوي المتبقي كله — استخدم زرار صرف الإجمالي أو صرف المتبقي"); return; }
+  if (!confirm(`تأكيد صرف جزء ${amount} ج من الكوبون؟`)) return;
+  try { const r = await api("POST", `/api/coupons/${id}/redeem`, { amount }); showRedeemResult(r); showTab("coupons"); }
+  catch (e) { alert(e.message); }
+}
+// صرف الإجمالي (كوبون جديد) أو صرف المتبقي (بعد صرف جزئي): كل ما تبقّى دفعة واحدة
+// مع زيادة التأخير المستحقة — المتبقي يتحول بالنسبة مباشرة
+async function redeemAll(id, label) {
+  if (!confirm(`تأكيد صرف ${label} بالكامل؟`)) return;
+  try { const r = await api("POST", `/api/coupons/${id}/redeem`, {}); showRedeemResult(r); showTab("coupons"); }
+  catch (e) { alert(e.message); }
+}
 async function redeemCoupon(id) {
   const amtInput = $("#redeemAmt" + id) || $("#landAmt");
   const amount = amtInput ? +amtInput.value : undefined;
@@ -224,8 +250,7 @@ async function redeemCoupon(id) {
   if (!confirm(amount ? `تأكيد صرف ${amount} ج من الكوبون؟` : "تأكيد استبدال الكوبون بالكامل؟")) return;
   try {
     const r = await api("POST", `/api/coupons/${id}/redeem`, amount != null ? { amount } : {});
-    const d = r.redeemed || {};
-    alert(`تم الصرف ${d.fully ? "بالكامل ✅" : "جزئيًا 💰"}\nالكوبون: ${d.code}\nالمبلغ المصروف: ${fmt(d.amount)} ج${d.valuePct > 0 ? `\nزيادة التأخير: +${d.valuePct}% (بعد ${d.days} يوم)` : ""}\nالمبلغ المستلم: ${fmt(d.payout)} ج${d.extraPoints > 0 ? `\nزيادة النقاط: +${fmt(d.extraPoints)} نقطة (+${d.pointsPct}%)` : ""}\nالمتبقي في الكوبون: ${fmt(d.remaining)} ج`);
+    showRedeemResult(r);
     showTab("coupons");
   } catch (e) { alert(e.message); }
 }

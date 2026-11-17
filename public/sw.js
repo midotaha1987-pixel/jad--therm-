@@ -2,7 +2,7 @@
 // وطلبات الـ API تمر للشبكة مباشرة (لا تُخزَّن).
 // ملاحظة: عند أي تحديث لملفات التطبيق (app.js أو غيره) ارفع رقم النسخة هنا،
 // حتى يتحدّث التطبيق المثبّت عند المستخدمين — الكاش القديم لا يتحدّث من نفسه.
-const CACHE = 'gadtherm-v3';
+const CACHE = 'gadtherm-v4';
 const CORE = ['/', '/index.html', '/style.css', '/app.js', '/manifest.json', '/icon-192.png', '/icon-512.png', '/icon.svg'];
 
 self.addEventListener('install', (e) => {

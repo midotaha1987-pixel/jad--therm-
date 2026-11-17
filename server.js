@@ -526,7 +526,8 @@ app.get("/api/coupons", auth, (req, res) => {
   let rows;
   if (u.role === "admin") rows = db.prepare("SELECT * FROM coupons ORDER BY id DESC LIMIT 100").all();
   else rows = db.prepare("SELECT * FROM coupons WHERE owner_id=? OR created_by=? ORDER BY id DESC LIMIT 100").all(u.id, u.id);
-  res.json({ ok: true, coupons: rows });
+  // زيادة التأخير الحالية لكل كوبون — لعرض المتبقي بعد التحويل بالنسبة مباشرة على الكارت
+  res.json({ ok: true, coupons: rows.map(c => ({ ...c, bonus: delayBonus(c.created_at) })) });
 });
 // QR لكل كوبون: يفتح رابط استبدال الكوبون (يملأ الكود تلقائيًا عند المسح)
 app.get("/api/coupons/:id/qr", auth, (req, res) => {
