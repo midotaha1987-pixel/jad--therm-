@@ -38,7 +38,7 @@ jobs:
       - name: Sync web assets
         run: |
           cp ../public/index.html ../public/app.js ../public/style.css ../public/icon.svg www/
-          cp ../public/icon-512.png www/ 2>/dev/null || true
+          cp ../public/icon-512.png ../public/icon-192.png ../public/manifest.json ../public/sw.js www/ 2>/dev/null || true
           npx cap sync android
 
       - name: Setup JDK 17
