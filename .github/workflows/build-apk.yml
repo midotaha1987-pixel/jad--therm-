@@ -64,7 +64,7 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace | tee "$GITHUB_WORKSPACE/gradle-apk.log"
+          ./gradlew assembleDebug --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/gradle-apk.log"
           test "${PIPESTATUS[0]}" -eq 0
 
       # Temporary debug aid: post the Gradle error tail as an issue so the

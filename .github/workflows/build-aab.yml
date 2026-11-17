@@ -87,10 +87,10 @@ jobs:
           cd android
           chmod +x gradlew
           if [ -n "$KEYSTORE_BASE64" ]; then
-            ./gradlew bundleRelease --stacktrace | tee "$GITHUB_WORKSPACE/gradle-aab.log"
+            ./gradlew bundleRelease --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/gradle-aab.log"
             test "${PIPESTATUS[0]}" -eq 0
           else
-            ./gradlew bundleDebug --stacktrace | tee "$GITHUB_WORKSPACE/gradle-aab.log"
+            ./gradlew bundleDebug --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/gradle-aab.log"
             test "${PIPESTATUS[0]}" -eq 0
           fi
 
