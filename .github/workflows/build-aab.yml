@@ -6,6 +6,11 @@
 # بدون هذه الأسرار يُبنى إصدار debug للتجربة فقط (لا يصلح للنشر على المتجر).
 name: Build Android AAB
 
+# The failure reporter creates an issue, so the token needs issues:write.
+permissions:
+  contents: read
+  issues: write
+
 on:
   push:
     branches: [main]
@@ -102,8 +107,8 @@ jobs:
           $TAIL
           \`\`\`"
           jq -n --arg title "[CI debug] AAB build failed" --arg body "$BODY" '{title:$title, body:$body}' > /tmp/issue.json
-          curl -s -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-            -d @/tmp/issue.json "https://api.github.com/repos/$GITHUB_REPOSITORY/issues" | head -c 300
+          curl -sS -f -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            -d @/tmp/issue.json "https://api.github.com/repos/$GITHUB_REPOSITORY/issues"
 
       - name: Upload AAB
         uses: actions/upload-artifact@v4
