@@ -173,7 +173,7 @@ async function vCoupons() {
       ${x.status !== "redeemed" && (isOwner || ME.role === "admin") ? `<select id="sendTo${x.id}" style="max-width:220px">${users.users.filter(u => u.id !== ME.id).map(u => `<option value="${u.id}">${esc(u.name)} (${ROLE_AR[u.role]})</option>`).join("")}</select>
       <button class="btn small" onclick="sendCoupon(${x.id})">إرسال</button>
       <button class="btn small" onclick="shareCouponWA(${x.id}, '${esc(x.code)}', ${x.value}, ${remaining})">📲 واتساب</button>` : ""}
-      ${ME.role === "admin" && x.status === "available" ? `<button class="btn small danger" onclick="deleteCoupon(${x.id}, '${esc(x.code)}')">🗑️ حذف</button>` : ""}
+      ${ME.role === "admin" ? `<button class="btn small danger" onclick="deleteCoupon(${x.id}, '${esc(x.code)}')">🗑️ حذف</button>` : ""}
     </div></div>`;
   }).join("") || `<p class="muted">لا توجد كوبونات</p>`}</div>`;
   return h;

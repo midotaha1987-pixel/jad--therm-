@@ -617,16 +617,18 @@ app.post("/api/coupons/:id/redeem", auth, (req, res) => {
     valuePct: bonus.valuePct, payout, pointsPct: bonus.pointsPct, extraPoints, jobPoints,
     remaining: fully ? 0 : newRemaining, fully } });
 });
-// حذف كوبون (الأدمن فقط): مسموح فقط للكوبون المتاح الذي لم يُصرف منه شيء.
-// الكوبون المستبدل (كليًا أو جزئيًا) لا يُحذف حمايةً للحسابات — قيمته ونقاطه
-// دخلت بالفعل في الأرصدة وسجل الحركات، وحذفه كان سيُفسد الدفتر.
+// حذف كوبون (الأدمن فقط): أي كوبون مهما كانت حالته — متاح، متبقٍ جزئي، أو مستبدل.
+// الحذف يُسجَّل في سجل الحركات بكود الكوبون وقيمته وحالته والمتبقي قبل الحذف،
+// فيفضل أثر للمراجعة. المبالغ التي صُرفت بالفعل قبل الحذف تبقى في رصيد صاحبها
+// (الحذف يمسح الكوبون، لا يلغي الصرف) — هذا ما طلبه روني: «الادمن بس اللى يعرف
+// يعمل او يحذف اى شيء»، وبنفس القاعدة في نسخة Muse.
 app.delete("/api/coupons/:id", auth, requireRole("admin"), (req, res) => {
   const c = db.prepare("SELECT * FROM coupons WHERE id=?").get(req.params.id);
   if (!c) return res.status(404).json({ ok: false, error: "الكوبون غير موجود" });
-  if (c.status !== "available") return res.status(400).json({ ok: false, error: "لا يمكن حذف كوبون تم صرفه (كليًا أو جزئيًا)" });
+  const remaining = c.remaining_value != null ? Number(c.remaining_value) : Number(c.value);
   db.prepare("UPDATE coupon_requests SET coupon_id=NULL WHERE coupon_id=?").run(c.id);
   db.prepare("DELETE FROM coupons WHERE id=?").run(c.id);
-  logTx(req.user.id, "coupon_delete", c.value, `حذف كوبون ${c.code} بقيمة ${c.value} ج`, null);
+  logTx(req.user.id, "coupon_delete", c.value, `حذف كوبون ${c.code} بقيمة ${c.value} ج — الحالة قبل الحذف: ${c.status}، المتبقي: ${remaining} ج`, null);
   res.json({ ok: true, deleted: c.code });
 });
 
