@@ -89,7 +89,7 @@
 > **قبل الضغط على الزر:** غيّر `USERNAME` في الرابط التالي إلى اسم حساب GitHub الخاص بك،
 > بعد رفع هذا المشروع على GitHub.
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/midotaha1987-pixel/jad-therm)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/midotaha1987-pixel/jad--therm-)
 
 ### خطوات النشر خطوة بخطوة
 1. **أنشئ حسابًا مجانيًا على Render:** افتح [render.com](https://render.com) وسجّل بالإيميل أو بحساب GitHub (مجاني).
@@ -99,7 +99,7 @@
    git add .
    git commit -m "jad therm v1"
    git branch -M main
-   git remote add origin https://github.com/midotaha1987-pixel/jad-therm.git
+   git remote add origin https://github.com/midotaha1987-pixel/jad--therm-.git
    git push -u origin main
    ```
 3. **اربط GitHub بـ Render:** في لوحة Render اضغط **New → Blueprint** واختر المستودع `jad-therm`،
