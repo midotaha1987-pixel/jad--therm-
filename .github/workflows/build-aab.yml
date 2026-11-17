@@ -82,10 +82,28 @@ jobs:
           cd android
           chmod +x gradlew
           if [ -n "$KEYSTORE_BASE64" ]; then
-            ./gradlew bundleRelease
+            ./gradlew bundleRelease --stacktrace | tee "$GITHUB_WORKSPACE/gradle-aab.log"
+            test "${PIPESTATUS[0]}" -eq 0
           else
-            ./gradlew bundleDebug
+            ./gradlew bundleDebug --stacktrace | tee "$GITHUB_WORKSPACE/gradle-aab.log"
+            test "${PIPESTATUS[0]}" -eq 0
           fi
+
+      # Temporary debug aid: post the Gradle error tail as an issue so the
+      # failure can be read without GitHub log access. Remove once green.
+      - name: Report build failure as issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAIL=$(tail -n 150 "$GITHUB_WORKSPACE/gradle-aab.log" 2>/dev/null || echo "no log file")
+          BODY="AAB build failed on $GITHUB_SHA. Last 150 lines of Gradle output:
+          \`\`\`
+          $TAIL
+          \`\`\`"
+          jq -n --arg title "[CI debug] AAB build failed" --arg body "$BODY" '{title:$title, body:$body}' > /tmp/issue.json
+          curl -s -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            -d @/tmp/issue.json "https://api.github.com/repos/$GITHUB_REPOSITORY/issues" | head -c 300
 
       - name: Upload AAB
         uses: actions/upload-artifact@v4

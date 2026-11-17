@@ -59,7 +59,24 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --stacktrace | tee "$GITHUB_WORKSPACE/gradle-apk.log"
+          test "${PIPESTATUS[0]}" -eq 0
+
+      # Temporary debug aid: post the Gradle error tail as an issue so the
+      # failure can be read without GitHub log access. Remove once green.
+      - name: Report build failure as issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAIL=$(tail -n 150 "$GITHUB_WORKSPACE/gradle-apk.log" 2>/dev/null || echo "no log file")
+          BODY="APK build failed on $GITHUB_SHA. Last 150 lines of Gradle output:
+          \`\`\`
+          $TAIL
+          \`\`\`"
+          jq -n --arg title "[CI debug] APK build failed" --arg body "$BODY" '{title:$title, body:$body}' > /tmp/issue.json
+          curl -s -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            -d @/tmp/issue.json "https://api.github.com/repos/$GITHUB_REPOSITORY/issues" | head -c 300
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
