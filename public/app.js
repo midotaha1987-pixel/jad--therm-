@@ -173,6 +173,7 @@ async function vCoupons() {
       ${x.status !== "redeemed" && (isOwner || ME.role === "admin") ? `<select id="sendTo${x.id}" style="max-width:220px">${users.users.filter(u => u.id !== ME.id).map(u => `<option value="${u.id}">${esc(u.name)} (${ROLE_AR[u.role]})</option>`).join("")}</select>
       <button class="btn small" onclick="sendCoupon(${x.id})">إرسال</button>
       <button class="btn small" onclick="shareCouponWA(${x.id}, '${esc(x.code)}', ${x.value}, ${remaining})">📲 واتساب</button>` : ""}
+      ${ME.role === "admin" && x.status === "available" ? `<button class="btn small danger" onclick="deleteCoupon(${x.id}, '${esc(x.code)}')">🗑️ حذف</button>` : ""}
     </div></div>`;
   }).join("") || `<p class="muted">لا توجد كوبونات</p>`}</div>`;
   return h;
@@ -227,6 +228,11 @@ async function redeemCoupon(id) {
     alert(`تم الصرف ${d.fully ? "بالكامل ✅" : "جزئيًا 💰"}\nالكوبون: ${d.code}\nالمبلغ المصروف: ${fmt(d.amount)} ج${d.valuePct > 0 ? `\nزيادة التأخير: +${d.valuePct}% (بعد ${d.days} يوم)` : ""}\nالمبلغ المستلم: ${fmt(d.payout)} ج${d.extraPoints > 0 ? `\nزيادة النقاط: +${fmt(d.extraPoints)} نقطة (+${d.pointsPct}%)` : ""}\nالمتبقي في الكوبون: ${fmt(d.remaining)} ج`);
     showTab("coupons");
   } catch (e) { alert(e.message); }
+}
+async function deleteCoupon(id, code) {
+  if (!confirm(`حذف الكوبون ${code} نهائيًا؟ لا يمكن التراجع.`)) return;
+  try { await api("DELETE", `/api/coupons/${id}`); showTab("coupons"); }
+  catch (e) { alert(e.message); }
 }
 
 // ---------------- طلبات الكوبونات ----------------

@@ -252,6 +252,12 @@ function seed() {
 }
 seed();
 
+// حسابات تجربة (روني — للتجربة): تُنشأ تلقائيًا عند كل تشغيل إن لم تكن موجودة،
+// حتى على قاعدة بيانات قديمة — الـ seed أعلاه يعمل فقط على قاعدة فارغة.
+// اسم المستخدم UNIQUE، فإعادة التشغيل لا تكرّر الحساب.
+newUser("تجربه", "تجربه", "technician", "123456");
+newUser("للتجربة", "للتجربة", "merchant", "123456");
+
 // ---------------------------------------------------------------------------
 // Labor / points / pricing engine
 // ---------------------------------------------------------------------------
@@ -610,6 +616,18 @@ app.post("/api/coupons/:id/redeem", auth, (req, res) => {
   res.json({ ok: true, redeemed: { code: c.code, originalValue: c.value, amount, days: bonus.days,
     valuePct: bonus.valuePct, payout, pointsPct: bonus.pointsPct, extraPoints, jobPoints,
     remaining: fully ? 0 : newRemaining, fully } });
+});
+// حذف كوبون (الأدمن فقط): مسموح فقط للكوبون المتاح الذي لم يُصرف منه شيء.
+// الكوبون المستبدل (كليًا أو جزئيًا) لا يُحذف حمايةً للحسابات — قيمته ونقاطه
+// دخلت بالفعل في الأرصدة وسجل الحركات، وحذفه كان سيُفسد الدفتر.
+app.delete("/api/coupons/:id", auth, requireRole("admin"), (req, res) => {
+  const c = db.prepare("SELECT * FROM coupons WHERE id=?").get(req.params.id);
+  if (!c) return res.status(404).json({ ok: false, error: "الكوبون غير موجود" });
+  if (c.status !== "available") return res.status(400).json({ ok: false, error: "لا يمكن حذف كوبون تم صرفه (كليًا أو جزئيًا)" });
+  db.prepare("UPDATE coupon_requests SET coupon_id=NULL WHERE coupon_id=?").run(c.id);
+  db.prepare("DELETE FROM coupons WHERE id=?").run(c.id);
+  logTx(req.user.id, "coupon_delete", c.value, `حذف كوبون ${c.code} بقيمة ${c.value} ج`, null);
+  res.json({ ok: true, deleted: c.code });
 });
 
 // ---------------------------------------------------------------------------
