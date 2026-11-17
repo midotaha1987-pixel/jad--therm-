@@ -28,7 +28,7 @@ async function api(method, path, body) {
 }
 
 const ROLE_AR = { admin: "الأدمن", distributor: "موزع", merchant: "تاجر", technician: "فني (سباك)", salesrep: "مندوب" };
-const SECTION_AR = { gasket: "الجوان PPH", ppr: "البولي PPR", white: "الأبيض uPVC", other: "منتجات أخرى" };
+const SECTION_AR = { gasket: "الجوان ولوازمه PPH", ppr: "البولي (لحام) PPR", white: "الصرف الصحي الأبيض uPVC", other: "لوازم عامة" };
 
 async function doLogin() {
   const u = $("#loginUser").value.trim(), p = $("#loginPass").value;
@@ -283,12 +283,19 @@ async function showNotifications() {
 
 // ---------------- حاسبة السباك ----------------
 let calcLines = [];
+let calcSec = ""; // مجموعة الأصناف المختارة في الحاسبة (فارغ = الكل)
 async function vCalc() {
   const techs = await api("GET", "/api/users").catch(() => ({ users: [] }));
   const techList = (techs.users || []).filter(u => u.role === "technician");
   return `<div class="card"><h2>🧮 حساب السباك (للمندوب فقط)</h2>
     <p class="muted">المواسير بالمتر — القطع بالقطعة — الأبيض والجوان 5% بعد خصم 18% — المعزول بنسبة اللستة أو +10% — الكرنك = قطعة لحام 4/3 (1.5 ج)</p>
     <div class="searchbox"><input id="calcSearch" placeholder="ابحث في اللستة: كوع 4/3، ماسورة 25..."><button class="btn" onclick="calcSearch()">بحث</button></div>
+    <div class="row mt" id="calcGroups">
+      <button class="btn small" data-sec="ppr" onclick="calcGroup('ppr')">🟢 البولي (لحام)</button>
+      <button class="btn small" data-sec="white" onclick="calcGroup('white')">⚪ الصرف الصحي الأبيض</button>
+      <button class="btn small" data-sec="gasket" onclick="calcGroup('gasket')">🔵 الجوان ولوازمه</button>
+      <button class="btn small" data-sec="other" onclick="calcGroup('other')">🧰 لوازم عامة</button>
+      <button class="btn small green" data-sec="" onclick="calcGroup('')">الكل</button></div>
     <div id="calcResults" class="mt"></div>
     <h3>بنود الحساب</h3>
     <div id="calcLines"><p class="muted">لا توجد بنود بعد</p></div>
@@ -316,9 +323,14 @@ async function vCalc() {
     <tr><td>النقاط</td><td>25% من الأجرة — المواسير 1.5% فقط — النقطة = 1 ج</td></tr>
   </table></div>`;
 }
+function calcGroup(sec) {
+  calcSec = sec;
+  document.querySelectorAll("#calcGroups .btn").forEach(b => b.classList.toggle("green", b.getAttribute("data-sec") === sec));
+  calcSearch();
+}
 async function calcSearch() {
   const q = $("#calcSearch").value.trim();
-  const r = await api("GET", `/api/catalog?q=${encodeURIComponent(q)}`);
+  const r = await api("GET", `/api/catalog?q=${encodeURIComponent(q)}${calcSec ? `&section=${calcSec}` : ""}`);
   $("#calcResults").innerHTML = r.items.slice(0, 20).map(i => `
     <div class="row" style="border-bottom:1px solid var(--line);padding:8px 0">
       <div><b>${esc(i.name)}</b> ${esc(i.size)} ${i.insulated ? '<span class="badge amber">معزول</span>' : ""}<br>
@@ -361,15 +373,19 @@ async function vOffers() {
 }
 
 // ---------------- الأسعار ----------------
+// لستة الأسعار مقسّمة 4 مجموعات منفصلة — كل مجموعة لوحدها (طلب روني):
+// البولي (لحام) / الصرف الصحي الأبيض / الجوان ولوازمه / لوازم عامة.
+let priceSec = "";
 async function vPrices() {
   const c = await api("GET", "/api/company");
   return `<div class="card"><h2>🏷️ لستة الأسعار</h2>
     <div class="searchbox"><input id="priceQ" placeholder="ابحث: كوع، ماسورة 25، بلاعة..."><button class="btn" onclick="priceSearch()">بحث</button></div>
-    <div class="row mt"><select id="priceSec" onchange="priceSearch()">
-      <option value="">كل الأقسام</option>
-      <option value="gasket">الجوان PPH</option><option value="ppr">البولي PPR</option>
-      <option value="white">الأبيض uPVC</option><option value="other">منتجات أخرى</option></select></div>
-    <div id="priceResults" class="mt"><p class="muted">اكتب كلمة للبحث أو اختر قسمًا</p></div></div>
+    <div class="row mt" id="priceGroups">
+      <button class="btn" data-sec="ppr" onclick="priceGroup('ppr')">🟢 البولي (لحام)</button>
+      <button class="btn" data-sec="white" onclick="priceGroup('white')">⚪ الصرف الصحي الأبيض</button>
+      <button class="btn" data-sec="gasket" onclick="priceGroup('gasket')">🔵 الجوان ولوازمه</button>
+      <button class="btn" data-sec="other" onclick="priceGroup('other')">🧰 لوازم عامة</button></div>
+    <div id="priceResults" class="mt"><p class="muted">اختر مجموعة لعرض أصنافها لوحدها</p></div></div>
   <div class="card"><h2>🏢 بيانات الشركة</h2>
     <p><b>${esc(c.company.name)}</b> — ${esc(c.company.tagline)}</p>
     <p>📞 ${esc(c.company.phone)} &nbsp; 📍 ${esc(c.company.address)}<br>🌐 ${esc(c.company.website)} &nbsp; 🛡️ ${esc(c.company.warranty)} — ${esc(c.company.slogan)}</p>
@@ -377,8 +393,13 @@ async function vPrices() {
     ${c.certificates.map(x => `<div class="flag"><b>${esc(x.title)}</b> — ${esc(x.issuer)} ${x.no ? `(${esc(x.no)})` : ""}<br>${esc(x.details)}</div>`).join("")}
     <p><span class="badge green">ISO Certified</span> <span class="badge blue">ضمان 50 سنة</span></p></div>`;
 }
+function priceGroup(sec) {
+  priceSec = sec;
+  document.querySelectorAll("#priceGroups .btn").forEach(b => b.classList.toggle("green", b.getAttribute("data-sec") === sec));
+  priceSearch();
+}
 async function priceSearch() {
-  const q = $("#priceQ").value.trim(), s = $("#priceSec").value;
+  const q = $("#priceQ").value.trim(), s = priceSec;
   const r = await api("GET", `/api/catalog?q=${encodeURIComponent(q)}&section=${s}`);
   $("#priceResults").innerHTML = `<p class="muted">${r.count} بند</p><table><tr><th>الصنف</th><th>المقاس</th><th>السعر</th></tr>${r.items.map(i => `<tr><td>${esc(i.name)} ${i.insulated ? '<span class="badge amber">معزول</span>' : ""}<br><span class="muted">${SECTION_AR[i.section]}</span></td><td>${esc(i.size)}</td><td>${fmt(i.price)} ج${i.unit === "meter" ? "/متر" : ""}</td></tr>`).join("")}</table>`;
 }
