@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#013078">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="جاد ثيرم">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <title>جاد ثيرم — GAD THERM</title>
 <link rel="stylesheet" href="/style.css">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
@@ -19,6 +25,8 @@
     <input id="loginUser" placeholder="اسم المستخدم / الكود" autocomplete="username">
     <input id="loginPass" type="password" placeholder="كلمة المرور" autocomplete="current-password">
     <button class="btn" style="width:100%" onclick="doLogin()">دخول</button>
+    <button id="installBtn" class="btn hidden" style="width:100%;margin-top:10px;background:#fff;color:#013078;border:2px solid #013078" onclick="installApp()">📲 تثبيت التطبيق على الموبايل</button>
+    <p id="iosHint" class="muted hidden" style="margin-top:10px">على الآيفون: دوس زر المشاركة ⬆️ ثم «إضافة إلى الشاشة الرئيسية»</p>
     <p class="muted" style="margin-top:14px">المندوب: الكود 25253<br>للتجربة: admin / admin123</p>
   </div>
 </div>
@@ -56,5 +64,29 @@
 </div>
 
 <script src="/app.js"></script>
+<script>
+// تثبيت التطبيق (PWA) + تسجيل الـ service worker
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('installBtn').classList.remove('hidden');
+});
+function installApp() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(() => {
+    deferredPrompt = null;
+    document.getElementById('installBtn').classList.add('hidden');
+  });
+}
+// تلميح الآيفون (سفاري لا يدعم زر التثبيت المباشر)
+if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !window.navigator.standalone) {
+  document.getElementById('iosHint').classList.remove('hidden');
+}
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
+}
+</script>
 </body>
 </html>
