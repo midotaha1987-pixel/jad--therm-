@@ -1,0 +1,12 @@
+{
+  "appId": "com.gadtherm.app",
+  "appName": "جاد ثيرم",
+  "webDir": "www",
+  "server": {
+    "url": "https://jad-therm.onrender.com",
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

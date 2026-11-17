@@ -1,0 +1,21 @@
+# Render Blueprint — جاد ثيرم (خطة مجانية)
+# انشر بضغطة واحدة من زر "Deploy to Render" في README بعد رفع المشروع على GitHub.
+services:
+  - type: web
+    name: jad-therm
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true
+      # ملاحظة: قاعدة بيانات SQLite ملف داخل الخدمة.
+      # الخطة المجانية في Render نظام ملفاتها مؤقت (ephemeral):
+      # البيانات قد تُفقد عند إعادة النشر أو إعادة التشغيل.
+      # الحل داخل التطبيق: من حساب الأدمن يوجد تصدير نسخة احتياطية
+      # (JSON) واستيرادها بعد أي إعادة نشر — راجع README.
+      # لاستمرارية كاملة يلزم قرص دائم (Disk) وهو متاح في الخطط المدفوعة فقط.

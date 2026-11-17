@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#013078">
+<title>جاد ثيرم — GAD THERM</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+</head>
+<body>
+<!-- شاشة الدخول -->
+<div id="loginScreen" class="login-wrap">
+  <div class="login-card">
+    <div id="logoLogin"></div>
+    <h1>جاد ثيرم</h1>
+    <div class="tag">جاد ثيرم لأنظمة المياة والصرف الصحى</div>
+    <div id="loginErr" class="err hidden"></div>
+    <input id="loginUser" placeholder="اسم المستخدم / الكود" autocomplete="username">
+    <input id="loginPass" type="password" placeholder="كلمة المرور" autocomplete="current-password">
+    <button class="btn" style="width:100%" onclick="doLogin()">دخول</button>
+    <p class="muted" style="margin-top:14px">المندوب: الكود 25253<br>للتجربة: admin / admin123</p>
+  </div>
+</div>
+
+<!-- التطبيق -->
+<div id="app" class="hidden">
+  <header>
+    <div class="brand">
+      <div class="logo-badge" id="logoHead"></div>
+      <div><b>جاد ثيرم</b><small id="roleLabel"></small></div>
+    </div>
+    <button class="icon-btn" id="micBtn" title="بحث صوتي" onclick="toggleMic()">🎤</button>
+    <button class="logout" onclick="doLogout()">خروج</button>
+  </header>
+
+  <main id="main"></main>
+
+  <nav class="tabs" id="tabs"></nav>
+  <footer>جاد ثيرم للصناعات البلاستيكية والمعدنية — ضمان 50 سنة — 01559558978 — www.gadtherm.net</footer>
+</div>
+
+<div id="micModal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99;display:flex;align-items:center;justify-content:center;padding:20px">
+  <div class="card" style="width:100%;max-width:480px">
+    <h2>🎤 بحث صوتي</h2>
+    <p class="muted">مثال: "عدد النقاط" — "كوبوناتي" — "خط السير" — "سعر كوع 4/3"</p>
+    <div class="searchbox">
+      <input id="voiceText" placeholder="اكتب أو اضغط الميكروفون وتكلم...">
+      <button class="btn orange" id="micStart" onclick="startListening()">🎤 تكلم</button>
+    </div>
+    <div id="micStatus" class="mt muted"></div>
+    <div id="voiceResults" class="mt"></div>
+    <div class="row mt"><button class="btn" onclick="runVoiceSearch()">بحث</button><button class="btn ghost" onclick="closeMic()">إغلاق</button></div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

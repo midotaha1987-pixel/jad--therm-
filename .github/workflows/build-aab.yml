@@ -1,0 +1,91 @@
+# بناء حزمة أندرويد (AAB) لتطبيق جاد ثيرم — يعمل تلقائيًا على GitHub
+# الناتج: ملف app-release.aab جاهز للرفع على Google Play
+# التوقيع: أضف الأسرار التالية في GitHub (Settings → Secrets → Actions) بعد إنشاء مفتاح التوقيع:
+#   KEYSTORE_BASE64 — ملف keystore بصيغة base64
+#   KEY_ALIAS, KEY_STORE_PASSWORD, KEY_PASSWORD
+# بدون هذه الأسرار يُبنى إصدار debug للتجربة فقط (لا يصلح للنشر على المتجر).
+name: Build Android AAB
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mobile/**"
+      - "public/**"
+      - ".github/workflows/build-aab.yml"
+  workflow_dispatch:
+
+jobs:
+  build-aab:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync web assets
+        run: |
+          cp ../public/index.html ../public/app.js ../public/style.css ../public/icon.svg www/
+          cp ../public/icon-512.png www/ 2>/dev/null || true
+          npx cap sync android
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Restore keystore (release signing)
+        if: env.KEYSTORE_BASE64 != ''
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+          cat >> android/gradle.properties <<'EOF'
+          GAD_RELEASE_STORE_FILE=release.keystore
+          GAD_RELEASE_KEY_ALIAS=${{ secrets.KEY_ALIAS }}
+          GAD_RELEASE_STORE_PASSWORD=${{ secrets.KEY_STORE_PASSWORD }}
+          GAD_RELEASE_KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
+          EOF
+
+      - name: Build AAB (release)
+        if: env.KEYSTORE_BASE64 != ''
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew bundleRelease
+
+      - name: Build AAB (debug — بدون توقيع، للتجربة فقط)
+        if: env.KEYSTORE_BASE64 == ''
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew bundleDebug
+
+      - name: Upload AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: jad-therm-aab
+          path: |
+            mobile/android/app/build/outputs/bundle/release/app-release.aab
+            mobile/android/app/build/outputs/bundle/debug/app-debug.aab
+          if-no-files-found: error
