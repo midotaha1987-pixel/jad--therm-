@@ -96,6 +96,18 @@ jobs:
             test "${PIPESTATUS[0]}" -eq 0
           fi
 
+      # Verify the release AAB is actually signed (Play rejects unsigned
+      # bundles). Debug builds skip this — no release AAB exists then.
+      - name: Verify release AAB signature
+        run: |
+          AAB="android/app/build/outputs/bundle/release/app-release.aab"
+          if [ -f "$AAB" ]; then
+            jarsigner -verify "$AAB" | tee /tmp/aab-verify.txt
+            grep -q "jar verified" /tmp/aab-verify.txt
+          else
+            echo "Debug build — no release AAB to verify"
+          fi
+
       # Temporary debug aid: post the Gradle error tail as an issue so the
       # failure can be read without GitHub log access. Remove once green.
       - name: Report build failure as issue
