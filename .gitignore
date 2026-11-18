@@ -6,6 +6,15 @@ mobile/android/app/release.keystore
 mobile/android/app/build/
 mobile/android/.gradle/
 mobile/node_modules/
+radwan-standalone/node_modules/
+radwan-standalone/data/*.db
+radwan-standalone/data/*.db-shm
+radwan-standalone/data/*.db-wal
+radwan-standalone/mobile/node_modules/
+radwan-standalone/mobile/android/app/release.keystore
+radwan-standalone/mobile/android/app/build/
+radwan-standalone/mobile/android/.gradle/
+radwan-standalone/mobile/android/local.properties
 .env
 .DS_Store
 data/uploads/*

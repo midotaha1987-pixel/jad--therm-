@@ -1,0 +1,150 @@
+# بناء حزمة أندرويد (AAB) لتطبيق معرض الرضوان — يعمل تلقائيًا على GitHub
+# الناتج: ملف app-release.aab جاهز للرفع على Google Play
+# التوقيع: أضف الأسرار التالية في GitHub (Settings → Secrets → Actions) بعد إنشاء مفتاح توقيع
+# جديد خاص بالرضوان (منفصل عن مفتاح جاد ثيرم):
+#   RADWAN_KEYSTORE_BASE64 — ملف keystore بصيغة base64
+#   RADWAN_KEY_ALIAS, RADWAN_KEY_STORE_PASSWORD, RADWAN_KEY_PASSWORD
+# بدون هذه الأسرار يُبنى إصدار debug للتجربة فقط (لا يصلح للنشر على المتجر).
+name: Build Radwan Android AAB
+
+# The failure reporter creates an issue, so the token needs issues:write.
+permissions:
+  contents: read
+  issues: write
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "radwan-standalone/**"
+      - ".github/workflows/radwan-build-aab.yml"
+  workflow_dispatch:
+
+jobs:
+  build-aab:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: radwan-standalone/mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: radwan-standalone/mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync web assets
+        run: |
+          cp ../public/index.html ../public/app.js ../public/style.css ../public/icon.svg www/
+          cp ../public/icon-512.png ../public/icon-192.png ../public/manifest.json ../public/sw.js www/ 2>/dev/null || true
+          npx cap sync android
+
+      # Capacitor 7.6's android library sets source/targetCompatibility to
+      # Java 21 — JDK 17 fails its compile with "invalid source release: 21".
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      # GitHub-hosted runners already ship the full Android SDK (root-owned at
+      # /usr/local/lib/android/sdk). android-actions/setup-android@v3 fails on
+      # it (permission errors reinstalling over the preinstalled SDK), so use
+      # the preinstalled one directly instead.
+      - name: Use runner's preinstalled Android SDK
+        run: |
+          echo "ANDROID_HOME=${ANDROID_HOME:-/usr/local/lib/android/sdk}" >> "$GITHUB_ENV"
+          ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools"
+          ls "${ANDROID_HOME:-/usr/local/lib/android/sdk}/platforms"
+
+      # NOTE: do not gate steps with `if: ${{ secrets... }}` — GitHub rejects
+      # the whole workflow at startup (0 jobs). Check the secret inside bash.
+      - name: Restore keystore (release signing)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RADWAN_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "No keystore secret — building debug AAB instead"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+          cat >> android/gradle.properties <<'EOF'
+          RADWAN_RELEASE_STORE_FILE=release.keystore
+          RADWAN_RELEASE_KEY_ALIAS=${{ secrets.RADWAN_KEY_ALIAS }}
+          RADWAN_RELEASE_STORE_PASSWORD=${{ secrets.RADWAN_KEY_STORE_PASSWORD }}
+          RADWAN_RELEASE_KEY_PASSWORD=${{ secrets.RADWAN_KEY_PASSWORD }}
+          EOF
+
+      - name: Build AAB
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RADWAN_KEYSTORE_BASE64 }}
+        run: |
+          cd android
+          chmod +x gradlew
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            ./gradlew bundleRelease --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/gradle-radwan-aab.log"
+            test "${PIPESTATUS[0]}" -eq 0
+          else
+            ./gradlew bundleDebug --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/gradle-radwan-aab.log"
+            test "${PIPESTATUS[0]}" -eq 0
+          fi
+
+      # Verify the release AAB is actually signed (Play rejects unsigned
+      # bundles). Debug builds skip this — no release AAB exists then.
+      - name: Verify release AAB signature
+        run: |
+          AAB="android/app/build/outputs/bundle/release/app-release.aab"
+          if [ -f "$AAB" ]; then
+            jarsigner -verify "$AAB" | tee /tmp/aab-verify.txt
+            grep -q "jar verified" /tmp/aab-verify.txt
+          else
+            echo "Debug build — no release AAB to verify"
+          fi
+
+      # Temporary debug aid: post the Gradle error tail as an issue so the
+      # failure can be read without GitHub log access. Remove once green.
+      - name: Report build failure as issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LOG="$GITHUB_WORKSPACE/gradle-radwan-aab.log"
+          {
+            echo "=== javac errors ==="
+            grep -n "error:" "$LOG" | head -40
+            echo "=== What went wrong ==="
+            grep -A 12 "What went wrong" "$LOG" | head -30
+            echo "=== Caused by ==="
+            grep "Caused by" "$LOG" | head -10
+            echo "=== tail ==="
+            tail -n 40 "$LOG"
+          } > /tmp/report.txt
+          BODY="Radwan AAB build failed on $GITHUB_SHA.
+          $(cat /tmp/report.txt)"
+          jq -n --arg title "[CI debug] Radwan AAB build failed" --arg body "$BODY" '{title:$title, body:$body}' > /tmp/issue.json
+          curl -sS -f -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            -d @/tmp/issue.json "https://api.github.com/repos/$GITHUB_REPOSITORY/issues"
+
+      - name: Upload AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: al-radwan-aab
+          path: |
+            radwan-standalone/mobile/android/app/build/outputs/bundle/release/app-release.aab
+            radwan-standalone/mobile/android/app/build/outputs/bundle/debug/app-debug.aab
+          if-no-files-found: error
+
+      - name: Close CI debug issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue list --state open --json number,title --jq '.[] | select(.title | startswith("[CI debug] Radwan")) | .number' | while read -r n; do
+            gh issue close "$n" --comment "Build is green — closing debug issue."
+          done

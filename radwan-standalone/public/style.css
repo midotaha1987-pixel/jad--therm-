@@ -1,0 +1,73 @@
+:root{
+  --green:#14703D; --green2:#0B4D28; --green3:#1E8A4C; --gold:#FFC53D;
+  --bg:#EEF4EF; --card:#fff; --ink:#12261A; --dim:#5C7266;
+  --line:#CFE0D4; --red:#D62828; --amber:#E8A100; --sky:#2E7FA8;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;background:var(--bg);color:var(--ink);direction:rtl}
+a{color:var(--green2)}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:15px;padding:10px;border:1px solid var(--line);border-radius:10px;width:100%;background:#fff;color:var(--ink)}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--green3)}
+.btn{background:var(--green);color:#fff;border:0;border-radius:10px;padding:11px 18px;font-size:15px;font-weight:700}
+.btn:hover{background:var(--green3)}
+.btn.gold{background:var(--gold);color:#3A2A00}
+.btn.ghost{background:#fff;color:var(--green);border:1.5px solid var(--green)}
+.btn.small{padding:7px 12px;font-size:13px}
+.btn.danger{background:var(--red)}
+.btn.wa{background:#25D366;color:#fff}
+.hidden{display:none!important}
+.muted{color:var(--dim);font-size:13px}
+.center{text-align:center}
+.mt{margin-top:14px}.mb{margin-bottom:14px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.row>*{flex:1}
+.row .btn{flex:none}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.card h3{margin:0 0 8px;font-size:16px}
+.err{background:#fde8e8;color:#a11;border:1px solid #f5c6c6;border-radius:10px;padding:10px;margin-bottom:10px;font-size:14px}
+.ok{background:#e6f6ec;color:#0B4D28;border:1px solid #bfe6cc;border-radius:10px;padding:10px;margin-bottom:10px;font-size:14px}
+.badge{display:inline-block;background:#EAF5ED;color:var(--green2);border:1px solid var(--line);border-radius:20px;padding:2px 10px;font-size:12px;font-weight:700}
+.badge.red{background:#fde8e8;color:#a11}
+.badge.gold{background:#FFF3D6;color:#7A5A00}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:8px;border-bottom:1px solid var(--line);text-align:right}
+th{color:var(--dim);font-size:12px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:center}
+.stat b{display:block;font-size:22px;color:var(--green2)}
+.stat span{font-size:13px;color:var(--dim)}
+
+/* login */
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(160deg,var(--green2) 0%,var(--green) 55%,#0a3d20 100%)}
+.login-card{background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:380px;box-shadow:0 12px 40px rgba(0,0,0,.35);text-align:center}
+.login-card h1{color:var(--green2);margin:8px 0 2px;font-size:26px}
+.login-card .tag{color:var(--dim);font-size:14px;margin-bottom:18px}
+.login-card input{margin-bottom:10px}
+
+/* header */
+header{position:sticky;top:0;z-index:50;background:var(--green);color:#fff;display:flex;align-items:center;gap:10px;padding:10px 14px}
+header .brand{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
+header .brand b{font-size:18px;white-space:nowrap}
+header .brand small{display:block;color:var(--gold);font-size:11px;font-weight:400}
+.icon-btn{background:rgba(255,255,255,.15);border:0;color:#fff;border-radius:50%;width:42px;height:42px;font-size:20px;flex:none}
+.logout{background:rgba(255,255,255,.15);border:0;color:#fff;border-radius:10px;padding:9px 12px;font-size:14px;font-weight:700}
+main{padding:14px 14px 110px;max-width:900px;margin:0 auto}
+
+/* bottom tabs */
+nav.tabs{position:fixed;bottom:0;right:0;left:0;background:#fff;border-top:1px solid var(--line);display:flex;overflow-x:auto;z-index:50;padding-bottom:env(safe-area-inset-bottom)}
+nav.tabs button{flex:1;min-width:64px;background:none;border:0;padding:8px 2px 6px;font-size:11px;color:var(--dim);white-space:nowrap}
+nav.tabs button .ic{display:block;font-size:20px}
+nav.tabs button.active{color:var(--green2);font-weight:700}
+footer{text-align:center;color:var(--dim);font-size:12px;padding:8px 0 90px}
+.searchbox{display:flex;gap:8px}
+.searchbox input{flex:1}
+.chip{display:inline-block;background:#fff;border:1.5px solid var(--green);color:var(--green2);border-radius:20px;padding:6px 14px;font-size:13px;font-weight:700;margin:2px;cursor:pointer}
+.chip.on{background:var(--green);color:#fff}
+.locked{border:2px dashed var(--line);border-radius:14px;padding:30px 16px;text-align:center;color:var(--dim);background:#fff}
+.price-line{display:flex;justify-content:space-between;font-size:14px;padding:3px 0;border-bottom:1px dashed #eee}
+.price-line b{color:var(--green2)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99;display:flex;align-items:center;justify-content:center;padding:20px}
+.modal .card{width:100%;max-width:480px;max-height:85vh;overflow:auto}
+@media (max-width:520px){.grid{grid-template-columns:1fr 1fr}}

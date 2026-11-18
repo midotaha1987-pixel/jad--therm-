@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14703D">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="معرض الرضوان">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<title>معرض الرضوان</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+</head>
+<body>
+<!-- شاشة الدخول -->
+<div id="loginScreen" class="login-wrap">
+  <div class="login-card">
+    <div id="logoLogin"></div>
+    <h1>معرض الرضوان</h1>
+    <div class="tag">الرضوان للأدوات الصحية — المحلة الكبرى</div>
+    <div id="loginErr" class="err hidden"></div>
+    <input id="loginUser" placeholder="اسم المستخدم" autocomplete="username">
+    <input id="loginPass" type="password" placeholder="كلمة المرور" autocomplete="current-password">
+    <button class="btn" style="width:100%" onclick="doLogin()">دخول</button>
+    <button id="installBtn" class="btn hidden" style="width:100%;margin-top:10px;background:#fff;color:#14703D;border:2px solid #14703D" onclick="installApp()">📲 تثبيت التطبيق على الموبايل</button>
+    <p id="iosHint" class="muted hidden" style="margin-top:10px">على الآيفون: دوس زر المشاركة ⬆️ ثم «إضافة إلى الشاشة الرئيسية»</p>
+    <p class="muted" style="margin-top:14px">للتجربة: rony / 123456<br>محمد: mohamed — حسام: hossam — الشيخ خالد: khaled</p>
+  </div>
+</div>
+
+<!-- التطبيق -->
+<div id="app" class="hidden">
+  <header>
+    <div class="brand">
+      <div class="logo-badge" id="logoHead"></div>
+      <div><b>معرض الرضوان</b><small id="roleLabel"></small></div>
+    </div>
+    <button class="icon-btn" title="بحث صوتي" onclick="openVoice()">🎤</button>
+    <button class="logout" onclick="doLogout()">خروج</button>
+  </header>
+
+  <main id="main"></main>
+
+  <nav class="tabs" id="tabs"></nav>
+  <footer>معرض الرضوان للأدوات الصحية — المحلة الكبرى، الشعبية، شارع حطين</footer>
+</div>
+
+<!-- نافذة الصوت -->
+<div id="voiceModal" class="modal hidden">
+  <div class="card">
+    <h2>🎤 بحث وأوامر صوتية</h2>
+    <p class="muted">مثال: «سعر كوع 4/3» — «مصروف 50 جنيه إيجار» — «مديونية السعيد»<br>الأوامر لا تُنفذ إلا بعد تأكيدك هنا.</p>
+    <div class="searchbox">
+      <input id="voiceText" placeholder="اكتب أو اضغط الميكروفون وتكلم...">
+      <button class="btn gold" id="micStart" onclick="startListening()">🎤 تكلم</button>
+    </div>
+    <div id="micStatus" class="mt muted"></div>
+    <div id="voiceResults" class="mt"></div>
+    <div class="row mt"><button class="btn" onclick="runVoice()">بحث / تنفيذ</button><button class="btn ghost" onclick="closeVoice()">إغلاق</button></div>
+  </div>
+</div>
+
+<!-- نافذة مسح الباركود -->
+<div id="scanModal" class="modal hidden">
+  <div class="card">
+    <h2>📷 مسح باركود</h2>
+    <p class="muted">وجّه الكاميرا للباركود، أو اكتب الرقم يدوياً.</p>
+    <video id="scanVideo" class="hidden" style="width:100%;border-radius:10px" autoplay playsinline></video>
+    <div class="row mt">
+      <button class="btn" onclick="startScan()">📷 تشغيل الكاميرا</button>
+      <button class="btn ghost" onclick="stopScan()">إيقاف</button>
+    </div>
+    <div class="searchbox mt">
+      <input id="scanCode" placeholder="أو اكتب رقم الباركود هنا...">
+      <button class="btn" onclick="lookupScanCode()">بحث</button>
+    </div>
+    <div id="scanResult" class="mt"></div>
+    <div class="row mt"><button class="btn ghost" onclick="closeScan()">إغلاق</button></div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+<script>
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('installBtn').classList.remove('hidden');
+});
+function installApp() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(() => {
+    deferredPrompt = null;
+    document.getElementById('installBtn').classList.add('hidden');
+  });
+}
+if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !window.navigator.standalone) {
+  document.getElementById('iosHint').classList.remove('hidden');
+}
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js'));
+}
+</script>
+</body>
+</html>
