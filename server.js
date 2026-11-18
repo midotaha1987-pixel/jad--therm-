@@ -169,6 +169,15 @@ CREATE TABLE IF NOT EXISTS inspections (
   FOREIGN KEY(created_by) REFERENCES users(id), FOREIGN KEY(technician_id) REFERENCES users(id),
   FOREIGN KEY(warranty_file_id) REFERENCES warranty_files(id)
 );
+CREATE TABLE IF NOT EXISTS inspection_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, inspection_id INTEGER NOT NULL,
+  catalog_id INTEGER, name TEXT NOT NULL, size TEXT DEFAULT '', qty REAL NOT NULL DEFAULT 1,
+  photo_filename TEXT DEFAULT '', note TEXT DEFAULT '',
+  created_by INTEGER, created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY(inspection_id) REFERENCES inspections(id),
+  FOREIGN KEY(catalog_id) REFERENCES catalog(id),
+  FOREIGN KEY(created_by) REFERENCES users(id)
+);
 `);
 
 // ترحيل: أعمدة قيمة الصرف الفعلية على جدول الكوبونات (للنسخ القديمة من قاعدة البيانات)
@@ -1295,6 +1304,7 @@ app.get("/api/inspections", auth, (req, res) => {
     rows = db.prepare("SELECT * FROM inspections WHERE created_by=? OR technician_id=? ORDER BY id DESC LIMIT 100").all(u.id, u.id);
   for (const r of rows) {
     r.photos = db.prepare("SELECT COUNT(*) c FROM attachments WHERE entity_type='inspection' AND entity_id=?").get(r.id).c;
+    r.itemsCount = db.prepare("SELECT COUNT(*) c FROM inspection_items WHERE inspection_id=?").get(r.id).c;
     const by = db.prepare("SELECT name FROM users WHERE id=?").get(r.created_by);
     r.createdByName = by ? by.name : "";
     const wf = r.warranty_file_id ? db.prepare("SELECT id,title FROM warranty_files WHERE id=?").get(r.warranty_file_id) : null;
@@ -1310,6 +1320,8 @@ app.get("/api/inspections/:id", auth, (req, res) => {
     return res.status(403).json({ ok: false, error: "لا تملك صلاحية عرض هذه المعاينة" });
   r.photos = db.prepare("SELECT * FROM attachments WHERE entity_type='inspection' AND entity_id=? ORDER BY id").all(r.id)
     .map(a => ({ ...a, url: `/api/uploads/${a.filename}` }));
+  r.items = db.prepare("SELECT * FROM inspection_items WHERE inspection_id=? ORDER BY id").all(r.id)
+    .map(i => ({ ...i, url: i.photo_filename ? `/api/uploads/${i.photo_filename}` : "" }));
   r.warranty = r.warranty_file_id ? db.prepare("SELECT * FROM warranty_files WHERE id=?").get(r.warranty_file_id) : null;
   if (r.warranty) r.warranty.url = `/api/uploads/${r.warranty.filename}`;
   const by = db.prepare("SELECT name FROM users WHERE id=?").get(r.created_by);
@@ -1317,6 +1329,31 @@ app.get("/api/inspections/:id", auth, (req, res) => {
   const tech = r.technician_id ? db.prepare("SELECT name FROM users WHERE id=?").get(r.technician_id) : null;
   r.technicianName = tech ? tech.name : "";
   res.json({ ok: true, inspection: r });
+});
+// إضافة قطعة مصوَّرة لمَعاينة: الصورة تُرفَق، والقطعة تُختار من اللستة وتُسجَّل هنا،
+// ويمكن بعدها إضافتها لحساب أجرة السباك من واجهة المعاينة.
+app.post("/api/inspections/:id/items", auth, jsonUpload, requireRole("salesrep", "technician", "admin"), (req, res) => {
+  const insp = db.prepare("SELECT * FROM inspections WHERE id=?").get(req.params.id);
+  if (!insp) return res.status(404).json({ ok: false, error: "المعاينة غير موجودة" });
+  const { catalogId, qty, photo, filename, mime, note } = req.body || {};
+  const cat = db.prepare("SELECT * FROM catalog WHERE id=?").get(Number(catalogId));
+  if (!cat) return res.status(400).json({ ok: false, error: "اختر قطعة من اللستة" });
+  const q = Number(qty);
+  if (!q || q <= 0) return res.status(400).json({ ok: false, error: "كمية غير صحيحة" });
+  let photoName = "";
+  try {
+    if (photo) {
+      const b64 = String(photo).includes(",") ? String(photo).split(",").pop() : String(photo);
+      const f = saveUploadFile(filename || "part.jpg", b64);
+      db.prepare("INSERT INTO attachments (entity_type,entity_id,kind,filename,mime,size,created_by) VALUES (?,?,?,?,?,?,?)")
+        .run("inspection", insp.id, "photo", f.name, String(mime || "image/jpeg"), f.size, req.user.id);
+      photoName = f.name;
+    }
+  } catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
+  const r = db.prepare(`INSERT INTO inspection_items (inspection_id,catalog_id,name,size,qty,photo_filename,note,created_by)
+    VALUES (?,?,?,?,?,?,?,?)`).run(insp.id, cat.id, cat.name, cat.size, q, photoName, String(note || ""), req.user.id);
+  const item = db.prepare("SELECT * FROM inspection_items WHERE id=?").get(r.lastInsertRowid);
+  res.json({ ok: true, item: { ...item, url: photoName ? `/api/uploads/${photoName}` : "" } });
 });
 app.put("/api/inspections/:id", auth, requireRole("salesrep", "technician", "admin"), (req, res) => {
   const r = db.prepare("SELECT * FROM inspections WHERE id=?").get(req.params.id);

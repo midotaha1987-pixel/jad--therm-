@@ -111,12 +111,24 @@ async function uploadPhoto(entityType, entityId, inputEl) {
       r.onerror = rej;
       r.readAsDataURL(f);
     });
-    const base64 = String(dataUrl).split(",")[1] || "";
-    await api("POST", "/api/attachments", { entityType, entityId, kind: "photo", filename: f.name || "photo.jpg", mime: f.type || "image/jpeg", data: base64 });
+    await uploadPhotoData(entityType, entityId, dataUrl, f.name || "photo.jpg", f.type || "image/jpeg");
     alert("تم حفظ الصورة ✅");
     refreshPhotoBoxes();
   } catch (e) { alert(e.message); }
   inputEl.value = "";
+}
+// رفع صورة من DataURL (يُستخدم من تدفق "صوّر قطعة" — الصورة تُرفَق والسجل يُنشأ بعدها)
+async function uploadPhotoData(entityType, entityId, dataUrl, filename, mime) {
+  const base64 = String(dataUrl).includes(",") ? String(dataUrl).split(",").pop() : String(dataUrl);
+  return api("POST", "/api/attachments", { entityType, entityId, kind: "photo", filename: filename || "photo.jpg", mime: mime || "image/jpeg", data: base64 });
+}
+function readFileAsDataURL(f) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = rej;
+    r.readAsDataURL(f);
+  });
 }
 async function refreshPhotoBoxes() {
   for (const box of document.querySelectorAll(".photos[data-entity]")) {
@@ -321,6 +333,15 @@ async function vCalc() {
       <button class="btn small" data-sec="gasket" onclick="calcGroup('gasket')">🔵 الجوان ولوازمه</button>
       <button class="btn small" data-sec="other" onclick="calcGroup('other')">🧰 لوازم عامة</button>
       <button class="btn small green" data-sec="" onclick="calcGroup('')">الكل</button></div>
+    <div class="card" style="background:#F0F6FF">
+      <h3>📷 صوّر قطعة وادخلها في الحساب</h3>
+      <p class="muted">صوّر القطعة بالكاميرا، وبعدها اختارها من اللستة — والقطعة المختارة تدخل في حساب أجرة السباك، والصورة بتترفق بالعرض عند الحفظ. ملحوظة: البرنامج مش بيتعرف على القطعة من الصورة لوحده (محتاج إنترنت) — انت اللي بتختارها من اللستة.</p>
+      <div class="row"><label class="btn" style="cursor:pointer">📷 صوّر قطعة
+        <input type="file" accept="image/*" capture="environment" style="display:none" onchange="photoPartCalc(this)">
+      </label><button class="btn ghost" onclick="clearPartPhoto()">إلغاء الصورة</button></div>
+      <div id="partPhotoBox" class="mt"></div>
+      <div id="partPicker" class="mt"></div>
+    </div>
     <div id="calcResults" class="mt"></div>
     <h3>بنود الحساب</h3>
     <div id="calcLines"><p class="muted">لا توجد بنود بعد</p></div>
@@ -377,10 +398,51 @@ async function refreshCalc() {
   $("#calcTotal").innerHTML = `<div class="stat"><b>${fmt(r.laborTotal)} ج</b><span>إجمالي أجرة السباك — النقاط: ${fmt(r.points)} نقطة</span></div>`;
 }
 function calcRemove(i) { calcLines.splice(i, 1); refreshCalc(); }
+// ---------------- تصوير قطعة وإدخالها في حساب السباك ----------------
+let _partPhoto = null; // {dataUrl, name, mime} — صورة القطعة المصوَّرة (تُرفَق بالعرض عند الحفظ)
+async function photoPartCalc(inputEl) {
+  const f = inputEl.files && inputEl.files[0];
+  inputEl.value = "";
+  if (!f) return;
+  if (f.size > 8 * 1024 * 1024) { alert("الصورة كبيرة — أقصى 8 ميجا"); return; }
+  _partPhoto = { dataUrl: await readFileAsDataURL(f), name: f.name || "part.jpg", mime: f.type || "image/jpeg" };
+  $("#partPhotoBox").innerHTML = `<img src="${_partPhoto.dataUrl}" style="width:160px;height:160px;object-fit:cover;border-radius:8px;border:2px solid var(--line)"><p class="muted">الصورة دي للقطعة — دلوقتي اختارها من اللستة تحت 👇</p>`;
+  $("#partPicker").innerHTML = `<div class="searchbox"><input id="partQ" placeholder="ابحث عن القطعة في اللستة: كوع، ماسورة..."><button class="btn" onclick="partSearch()">بحث</button></div><div id="partResults" class="mt"></div>`;
+  partSearch();
+}
+function clearPartPhoto() {
+  _partPhoto = null;
+  const b = $("#partPhotoBox"); if (b) b.innerHTML = "";
+  const p = $("#partPicker"); if (p) p.innerHTML = "";
+}
+async function partSearch() {
+  const q = ($("#partQ") ? $("#partQ").value : "").trim();
+  const r = await api("GET", `/api/catalog?q=${encodeURIComponent(q)}${calcSec ? `&section=${calcSec}` : ""}`);
+  $("#partResults").innerHTML = r.items.slice(0, 15).map(i => `
+    <div class="row" style="border-bottom:1px solid var(--line);padding:8px 0">
+      <div><b>${esc(i.name)}</b> ${esc(i.size)} ${i.insulated ? '<span class="badge amber">معزول</span>' : ""}<br>
+      <span class="muted">${SECTION_AR[i.section]} — ${fmt(i.price)} ج${i.unit === "meter" ? "/متر" : ""}</span></div>
+      <input type="number" id="pq${i.id}" value="1" min="0.5" step="0.5" style="max-width:90px" placeholder="${i.unit === "meter" ? "متر" : "قطعة"}">
+      <button class="btn small green" onclick="partPick(${i.id})">✅ اختيار وإضافة للحساب</button>
+    </div>`).join("") || `<p class="muted">لا نتائج — جرّب كلمة تانية</p>`;
+}
+function partPick(id) {
+  const qty = +($("#pq" + id).value || 1);
+  const ex = calcLines.find(l => l.catalogId === id);
+  if (ex) ex.qty += qty; else calcLines.push({ catalogId: id, qty });
+  refreshCalc();
+  alert(`تمت إضافة القطعة للحساب${_partPhoto ? " — والصورة هتترفق بالعرض عند الحفظ ✅" : ""}`);
+}
 async function saveJob() {
   try {
     const j = await api("POST", "/api/plumber-jobs", { technicianId: +$("#calcTech").value, items: calcLines });
-    alert(`تم الحفظ ✅\nأجرة السباك: ${j.job.laborTotal} ج\nالنقاط: ${j.job.points} نقطة\n📩 تم إرسال طلب كوبون #${j.couponRequest.id} للأدمن بقيمة ${j.couponRequest.value} ج — في انتظار الاعتماد`);
+    let photoNote = "";
+    if (_partPhoto) {
+      try { await uploadPhotoData("job", j.job.id, _partPhoto.dataUrl, _partPhoto.name, _partPhoto.mime); photoNote = "\n📷 تم إرفاق صورة القطعة بالعرض"; }
+      catch (e) { photoNote = "\n⚠️ لم تُرفَق صورة القطعة: " + e.message; }
+      _partPhoto = null;
+    }
+    alert(`تم الحفظ ✅\nأجرة السباك: ${j.job.laborTotal} ج\nالنقاط: ${j.job.points} نقطة\n📩 تم إرسال طلب كوبون #${j.couponRequest.id} للأدمن بقيمة ${j.couponRequest.value} ج — في انتظار الاعتماد${photoNote}`);
     calcLines = []; showTab("calc");
   } catch (e) { alert(e.message); }
 }
@@ -694,9 +756,13 @@ async function vInspections() {
   <div class="card"><h3>المعاينات السابقة</h3>
     ${ins.inspections.map(x => `<div class="coupon"><b>${esc(x.apartment)}</b> — ${esc(x.address)} <span class="muted">${esc(x.created_at.slice(0, 16))} — بواسطة ${esc(x.createdByName)}</span>
     <br>${x.location ? `📍 ${esc(x.location)}<br>` : ""}${x.warranty ? `🛡️ شهادة الضمان: <b>${esc(x.warranty.title)}</b><br>` : ""}
-    <span class="muted">الصور: ${x.photos} صورة</span>
+    <span class="muted">الصور: ${x.photos} صورة — قطع مسجلة: ${x.itemsCount || 0}</span>
     <div class="row mt"><button class="btn small" onclick="showInspection(${x.id})">عرض التفاصيل والصور</button>${photoInputHTML("inspection", x.id)}</div>
     <div class="photos mt" data-entity="inspection:${x.id}"></div>
+    <div class="row mt"><label class="btn small" style="cursor:pointer">📷 صوّر قطعة وسجّلها في المعاينة
+      <input type="file" accept="image/*" capture="environment" style="display:none" onchange="photoPartInspection(this, ${x.id})">
+    </label></div>
+    <div id="inspPick-${x.id}" class="mt"></div>
     <div id="insp-${x.id}" class="mt"></div></div>`).join("") || `<p class="muted">لا توجد معاينات بعد</p>`}</div>`;
 }
 function getLocation() {
@@ -733,7 +799,64 @@ async function showInspection(id) {
       <span class="muted">التاريخ: ${esc(x.created_at.slice(0, 16))} — بواسطة: ${esc(x.createdByName)}${x.technicianName ? ` — الفني: ${esc(x.technicianName)}` : ""}</span><br>
       ${x.warranty ? `🛡️ شهادة الضمان المرتبطة: <b>${esc(x.warranty.title)}</b> <a class="btn small" href="${x.warranty.url}?token=${TOKEN}" target="_blank">عرض الشهادة</a><br>` : `<span class="muted">بدون شهادة ضمان مرتبطة</span><br>`}
       <div class="mt">${x.photos.map(p => `<a href="${p.url}?token=${TOKEN}" target="_blank"><img src="${p.url}?token=${TOKEN}" style="width:120px;height:120px;object-fit:cover;border-radius:8px;margin:2px"></a>`).join("") || `<span class="muted">لا توجد صور</span>`}</div>
+      <h3 class="mt">🔧 قطع مسجلة في المعاينة</h3>
+      ${(x.items || []).map(it => `<div class="row" style="border-bottom:1px solid var(--line);padding:6px 0">
+        ${it.url ? `<img src="${it.url}?token=${TOKEN}" style="width:60px;height:60px;object-fit:cover;border-radius:8px">` : ""}
+        <div><b>${esc(it.name)}</b> ${esc(it.size)} — الكمية: ${it.qty}${it.note ? `<br><span class="muted">${esc(it.note)}</span>` : ""}</div></div>`).join("") || `<p class="muted">لا توجد قطع مسجلة بعد — صوّر قطعة من زر "صوّر قطعة وسجّلها" فوق</p>`}
+      ${(x.items && x.items.length) ? `<div class="row mt"><button class="btn green" onclick="inspToCalc(${x.id})">🧮 أضف قطع المعاينة لحساب أجرة السباك</button></div>` : ""}
     </div>`;
+  } catch (e) { alert(e.message); }
+}
+
+// ---------------- تصوير قطعة وتسجيلها في المعاينة ----------------
+let _inspPhoto = {}; // inspectionId -> {dataUrl, name, mime}
+async function photoPartInspection(inputEl, inspId) {
+  const f = inputEl.files && inputEl.files[0];
+  inputEl.value = "";
+  if (!f) return;
+  if (f.size > 8 * 1024 * 1024) { alert("الصورة كبيرة — أقصى 8 ميجا"); return; }
+  _inspPhoto[inspId] = { dataUrl: await readFileAsDataURL(f), name: f.name || "part.jpg", mime: f.type || "image/jpeg" };
+  const box = $("#inspPick-" + inspId);
+  box.innerHTML = `<div class="card" style="background:#F0F6FF">
+    <img src="${_inspPhoto[inspId].dataUrl}" style="width:140px;height:140px;object-fit:cover;border-radius:8px;border:2px solid var(--line)">
+    <p class="muted">الصورة دي للقطعة — اختارها من اللستة، واكتب الكمية وأي بيانات إضافية:</p>
+    <div class="searchbox"><input id="inspQ-${inspId}" placeholder="ابحث عن القطعة: كوع، ماسورة..."><button class="btn" onclick="inspPartSearch(${inspId})">بحث</button></div>
+    <div class="row mt"><input id="inspNote-${inspId}" placeholder="ملاحظة / بيانات إضافية (اختياري)"></div>
+    <div id="inspResults-${inspId}" class="mt"></div></div>`;
+  inspPartSearch(inspId);
+}
+async function inspPartSearch(inspId) {
+  const q = ($("#inspQ-" + inspId) ? $("#inspQ-" + inspId).value : "").trim();
+  const r = await api("GET", `/api/catalog?q=${encodeURIComponent(q)}`);
+  $("#inspResults-" + inspId).innerHTML = r.items.slice(0, 15).map(i => `
+    <div class="row" style="border-bottom:1px solid var(--line);padding:8px 0">
+      <div><b>${esc(i.name)}</b> ${esc(i.size)} ${i.insulated ? '<span class="badge amber">معزول</span>' : ""}<br>
+      <span class="muted">${SECTION_AR[i.section]} — ${fmt(i.price)} ج${i.unit === "meter" ? "/متر" : ""}</span></div>
+      <input type="number" id="iq${inspId}-${i.id}" value="1" min="0.5" step="0.5" style="max-width:90px" placeholder="${i.unit === "meter" ? "متر" : "قطعة"}">
+      <button class="btn small green" onclick="inspPartPick(${inspId}, ${i.id})">✅ تسجيل القطعة</button>
+    </div>`).join("") || `<p class="muted">لا نتائج — جرّب كلمة تانية</p>`;
+}
+async function inspPartPick(inspId, catalogId) {
+  const qty = +($("#iq" + inspId + "-" + catalogId).value || 1);
+  const note = $("#inspNote-" + inspId) ? $("#inspNote-" + inspId).value.trim() : "";
+  const ph = _inspPhoto[inspId] || null;
+  try {
+    await api("POST", `/api/inspections/${inspId}/items`, { catalogId, qty, photo: ph ? ph.dataUrl : undefined, filename: ph ? ph.name : undefined, mime: ph ? ph.mime : undefined, note });
+    delete _inspPhoto[inspId];
+    $("#inspPick-" + inspId).innerHTML = `<div class="flag" style="background:#dff3e6">تم تسجيل القطعة في المعاينة ✅ — تقدر تصوّر قطعة تانية، أو تشوف القطع المسجلة من "عرض التفاصيل والصور"</div>`;
+    showInspection(inspId);
+    refreshPhotoBoxes();
+  } catch (e) { alert(e.message); }
+}
+async function inspToCalc(inspId) {
+  try {
+    const r = await api("GET", `/api/inspections/${inspId}`);
+    const items = r.inspection.items || [];
+    if (!items.length) { alert("لا توجد قطع مسجلة في المعاينة"); return; }
+    calcLines = items.map(it => ({ catalogId: it.catalog_id, qty: it.qty }));
+    await showTab("calc");
+    await refreshCalc();
+    alert(`تمت إضافة ${items.length} قطعة من المعاينة لحساب السباك ✅ — راجع البنود واحفظ الحساب`);
   } catch (e) { alert(e.message); }
 }
 
@@ -758,20 +881,83 @@ async function showCouponLanding(code) {
 }
 
 // ---------------- بحث صوتي ----------------
+// الترتيب: (1) البلجن الأصلي للتعرف الصوتي داخل تطبيق الأندرويد (WebView لا يدعم Web Speech API)،
+// (2) Web Speech API في المتصفح (كروم)، (3) رسالة واضحة لو مفيش أي وسيلة متاحة.
 let recog = null;
+let nativeSR = null, nativeListeners = [];
 function toggleMic() { $("#micModal").classList.remove("hidden"); }
-function closeMic() { $("#micModal").classList.add("hidden"); if (recog) { try { recog.stop(); } catch {} } $("#micBtn").classList.remove("rec"); }
-function startListening() {
+async function closeMic() {
+  $("#micModal").classList.add("hidden");
+  if (recog) { try { recog.stop(); } catch {} recog = null; }
+  if (nativeSR) { try { await nativeSR.stop(); } catch {} nativeSR = null; }
+  try { for (const h of nativeListeners) h.remove(); } catch {}
+  nativeListeners = [];
+  $("#micBtn").classList.remove("rec");
+}
+function getNativeSpeech() {
+  try {
+    const Cap = window.Capacitor;
+    if (Cap && Cap.isNativePlatform && Cap.isNativePlatform())
+      return Cap.registerPlugin("SpeechRecognition");
+  } catch {}
+  return null;
+}
+async function startListeningNative(st) {
+  const plugin = getNativeSpeech();
+  if (!plugin) return false;
+  try {
+    const avail = await plugin.available();
+    if (!avail || !avail.available) {
+      st.textContent = "التعرف الصوتي غير متاح على هذا الجهاز — اكتب سؤالك في الخانة.";
+      return true;
+    }
+    let perm = await plugin.checkPermissions();
+    if (perm.speechRecognition !== "granted") perm = await plugin.requestPermissions();
+    if (perm.speechRecognition !== "granted") {
+      st.innerHTML = "إذن الميكروفون مرفوض — فعّله من إعدادات الموبايل ← التطبيقات ← جاد ثيرم ← الأذونات ← الميكروفون، وبعدها جرّب تاني.";
+      return true;
+    }
+    nativeSR = plugin;
+    $("#micBtn").classList.add("rec");
+    st.innerHTML = `<span class="mic-live">🎙️ بتسمع... تكلم دلوقتي، واسكت لما تخلص</span>`;
+    const r = await plugin.start({ language: "ar-EG", maxResults: 1, partialResults: false, popup: false });
+    if (r && r.matches && r.matches[0]) { $("#voiceText").value = r.matches[0]; runVoiceSearch(); }
+    else st.textContent = "ما سمعتش حاجة — جرّب تاني بصوت أوضح.";
+  } catch (e) {
+    const msg = String((e && e.message) || e || "");
+    if (/not implemented|unimplemented|no such|not found|NOT_IMPLEMENTED/i.test(msg)) return false; // البلجن مش مثبّت في النسخة دي — جرّب Web Speech
+    st.textContent = "تعذر الاستماع: " + msg + " — لو المشكلة مستمرة، اسمح للميكروفون من إعدادات الموبايل ← التطبيقات ← جاد ثيرم ← الأذونات.";
+  } finally {
+    $("#micBtn").classList.remove("rec");
+    try { for (const h of nativeListeners) h.remove(); } catch {}
+    nativeListeners = [];
+  }
+  return true;
+}
+function startListeningWeb(st) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const st = $("#micStatus");
-  if (!SR) { st.textContent = "المتصفح لا يدعم البحث الصوتي — اكتب سؤالك في الخانة."; return; }
+  if (!SR) {
+    st.innerHTML = "البحث الصوتي مش شغال هنا — WebView داخل تطبيق الأندرويد لا يدعم التعرف الصوتي من المتصفح، ونسخة التطبيق دي لسه من غير البلجن الأصلي. جرّب من متصفح كروم على الموبايل (أو ثبّت التطبيق من الرابط)، أو اكتب سؤالك في الخانة.";
+    return;
+  }
   recog = new SR(); recog.lang = "ar-EG"; recog.interimResults = false; recog.maxAlternatives = 1;
   $("#micBtn").classList.add("rec");
   st.innerHTML = `<span class="mic-live">🎙️ بتسمع... تكلم دلوقتي</span>`;
   recog.onresult = (e) => { $("#voiceText").value = e.results[0][0].transcript; runVoiceSearch(); };
-  recog.onerror = (e) => { st.textContent = "تعذر الاستماع: " + e.error; $("#micBtn").classList.remove("rec"); };
+  recog.onerror = (e) => {
+    st.textContent = e.error === "not-allowed"
+      ? "المتصفح رفض الميكروفون — اسمح له من إعدادات المتصفح (أيقونة القفل جنب الرابط ← الميكروفون)."
+      : "تعذر الاستماع: " + e.error;
+    $("#micBtn").classList.remove("rec");
+  };
   recog.onend = () => $("#micBtn").classList.remove("rec");
-  recog.start();
+  try { recog.start(); } catch (e) { st.textContent = "تعذر تشغيل الميكروفون: " + e.message; $("#micBtn").classList.remove("rec"); }
+}
+async function startListening() {
+  const st = $("#micStatus");
+  st.textContent = "";
+  if (await startListeningNative(st)) return;
+  startListeningWeb(st);
 }
 async function runVoiceSearch() {
   const q = $("#voiceText").value.trim();
