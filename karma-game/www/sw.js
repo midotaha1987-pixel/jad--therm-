@@ -1,5 +1,5 @@
 /* Service worker for 'عالم كارما الجميلة وأخواتها' — offline-first. */
-var CACHE = 'karma-game-v2';
+var CACHE = 'karma-game-v3';
 var CORE = [
   './',
   'index.html',
@@ -33,40 +33,6 @@ var CORE = [
   'assets/snd-correct.mp3',
   'assets/snd-finish.mp3',
   'assets/snd-tryagain.mp3',
-  'assets/story-abubakr.mp3',
-  'assets/story-adam.mp3',
-  'assets/story-ali.mp3',
-  'assets/story-alyasa.mp3',
-  'assets/story-ayyub.mp3',
-  'assets/story-dawud.mp3',
-  'assets/story-dhulkifl.mp3',
-  'assets/story-harun.mp3',
-  'assets/story-hud.mp3',
-  'assets/story-ibrahim.mp3',
-  'assets/story-idris.mp3',
-  'assets/story-ilyas.mp3',
-  'assets/story-isa.mp3',
-  'assets/story-ishaq.mp3',
-  'assets/story-ismail.mp3',
-  'assets/story-lut.mp3',
-  'assets/story-muhammad.mp3',
-  'assets/story-musa.mp3',
-  'assets/story-nuh.mp3',
-  'assets/story-salih.mp3',
-  'assets/story-shuaib.mp3',
-  'assets/story-sulayman.mp3',
-  'assets/story-umar.mp3',
-  'assets/story-uthman.mp3',
-  'assets/story-yahya.mp3',
-  'assets/story-yaqub.mp3',
-  'assets/story-yunus.mp3',
-  'assets/story-yusuf.mp3',
-  'assets/story-zakariya.mp3',
-  'assets/tale-cinderella.mp3',
-  'assets/tale-frog.mp3',
-  'assets/tale-redhood.mp3',
-  'assets/tale-sleeping.mp3',
-  'assets/tale-snowwhite.mp3',
   'assets/wudu-1.mp3',
   'assets/wudu-2.mp3',
   'assets/wudu-3.mp3',
@@ -74,13 +40,7 @@ var CORE = [
   'assets/wudu-5.mp3',
   'assets/wudu-6.mp3',
   'assets/wudu-7.mp3',
-  'assets/wudu-8.mp3',
-  'assets/film1-chase.mp4',
-  'assets/film1-cheese.mp4',
-  'assets/film1-friends.mp4',
-  'assets/film2-garden.mp4',
-  'assets/film2-forest.mp4',
-  'assets/film2-night.mp4'
+  'assets/wudu-8.mp3'
 ];
 self.addEventListener('install', function(e) {
   e.waitUntil(caches.open(CACHE).then(function(c) { return c.addAll(CORE); }).then(function() { return self.skipWaiting(); }));
