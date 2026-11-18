@@ -1,10 +1,54 @@
 /* جاد ثيرم — واجهة التطبيق */
+/* شعار جاد ثيرم — فيكتور مطابق للوجو الحقيقي في الكتالوج:
+   حرف G من ماسورة زرقاء (تدرّج أزرق ملكي ← كحلي غامق) مع وصلة في الأعلى،
+   ولهب أحمر-برتقالي أعلى اليمين، وقطرة مياه زرقاء داخل الـ G،
+   وشريط G الأفقي بتدرّج برتقالي ← أحمر. بدون أي لون ذهبي. */
 const LOGO_SVG = `<svg width="46" height="46" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-<rect width="100" height="100" rx="18" fill="#013078"/>
-<path d="M50 14 C60 26 66 34 66 46 a16 16 0 1 1 -32 0 c0-7 4-11 7-16 2 4 4 6 4 10 3-3 5-8 5-14z" fill="#E8110F"/>
-<path d="M50 30 C55 37 59 41 59 48 a9 9 0 1 1 -18 0 c0-4 2-6 4-9 1 2 2 3 2 5 2-2 3-4 3-8z" fill="#F96D00"/>
-<circle cx="70" cy="70" r="11" fill="#6BC5FF"/><circle cx="70" cy="70" r="6" fill="#fff" opacity=".65"/>
-<text x="50" y="94" font-size="11" font-weight="bold" fill="#fff" text-anchor="middle" font-family="Arial">GAD THERM</text>
+<defs>
+    <linearGradient id="pipeGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3F5EB4"/>
+      <stop offset="0.5" stop-color="#304CA7"/>
+      <stop offset="1" stop-color="#202554"/>
+    </linearGradient>
+    <linearGradient id="barGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F96D00"/>
+      <stop offset="1" stop-color="#E8110F"/>
+    </linearGradient>
+    <linearGradient id="flameGrad" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#F58611"/>
+      <stop offset="0.5" stop-color="#F15918"/>
+      <stop offset="1" stop-color="#EB1F23"/>
+    </linearGradient>
+    <linearGradient id="dropGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6CA1D9"/>
+      <stop offset="0.5" stop-color="#4461B6"/>
+      <stop offset="1" stop-color="#28317E"/>
+    </linearGradient>
+  </defs>
+  <!-- pipe arc: G opening top-right -->
+  <path d="M 61 26 A 30 30 0 1 0 72 72" fill="none" stroke="url(#pipeGrad)" stroke-width="12" stroke-linecap="round"/>
+  <!-- specular highlight along pipe top edge -->
+  <path d="M 20.1 42.1 A 33 33 0 0 1 61.3 24.9" fill="none" stroke="#5FC1EE" stroke-width="2.5" stroke-linecap="round" opacity="0.8"/>
+  <!-- coupling collar at pipe top end -->
+  <g transform="rotate(22 59 23.5)">
+    <rect x="50" y="16" width="18" height="15" rx="3" fill="url(#pipeGrad)" stroke="#202554" stroke-width="1" opacity="0.98"/>
+    <line x1="55" y1="17" x2="55" y2="30" stroke="#202554" stroke-width="1.4" opacity="0.6"/>
+    <line x1="62" y1="17" x2="62" y2="30" stroke="#202554" stroke-width="1.4" opacity="0.6"/>
+  </g>
+  <!-- coupling collar on upper-left diagonal (arc segment hugging the pipe) -->
+  <path d="M 34.1 28.5 A 30 30 0 0 0 24.5 38.1" fill="none" stroke="url(#pipeGrad)" stroke-width="14.5" stroke-linecap="butt"/>
+  <line x1="20.7" y1="31" x2="32.1" y2="40" stroke="#202554" stroke-width="1.3" opacity="0.6"/>
+  <line x1="27" y1="24.7" x2="36" y2="36.1" stroke="#202554" stroke-width="1.3" opacity="0.6"/>
+  <!-- red-orange horizontal bar + down stem -->
+  <path d="M 46 48 h 31 a 3 3 0 0 1 3 3 v 3 h -6 v 15 a 3 3 0 0 1 -3 3 h -4 a 3 3 0 0 1 -3 -3 v -12 h -18 a 3 3 0 0 1 -3 -3 v -3 a 3 3 0 0 1 3 -3 z" fill="url(#barGrad)"/>
+  <!-- flame -->
+  <g transform="translate(-2 4)">
+    <path d="M 81 6 C 87 14 92 19 92 26 a 11 11 0 1 1 -22 0 c 0 -5 3 -8 4 -12 c 2 3 3 4 4 4 c -1 -5 0 -8 3 -12 z" fill="url(#flameGrad)"/>
+    <path d="M 81 20 c 3 3 5 5 5 8 a 5 5 0 1 1 -10 0 c 0 -2 1 -3 2 -5 c 1 1 2 2 3 2 c 0 -2 0 -3 0 -5 z" fill="#F58611" opacity="0.9"/>
+  </g>
+  <!-- droplet (taller, per catalog: ~48% of G height) -->
+  <path d="M 36 30 C 41 40 43 48 43 59 a 7 7 0 1 1 -14 0 C 29 48 31 40 36 30 z" fill="url(#dropGrad)"/>
+  <ellipse cx="32.5" cy="50" rx="2" ry="4" fill="#ffffff" opacity="0.85" transform="rotate(-15 32.5 50)"/>
 </svg>`;
 document.getElementById("logoLogin").innerHTML = LOGO_SVG.replace('width="46" height="46"', 'width="90" height="90"');
 document.getElementById("logoHead").innerHTML = LOGO_SVG;
@@ -505,7 +549,7 @@ async function vRoute() {
     const list = r.plan[day] || [];
     h += list.map(p => {
       const v = r.visits[`${day}:${p.merchantId}`] || {};
-      return `<div class="card" style="margin-bottom:8px;${p.priority ? "border:2px solid var(--amber);background:#FFFBEB" : ""}">
+      return `<div class="card" style="margin-bottom:8px;${p.priority ? "border:2px solid var(--orange-deep);background:var(--warn-bg)" : ""}">
         <b>${esc(p.name)}</b> — <span class="muted">${esc(p.area)} — ${esc(p.address)}</span>
         ${p.priority ? `<span class="badge amber">⚠️ ${esc(p.priority)}</span>` : ""}
         ${v.done ? `<span class="badge green">✅ تمت الزيارة</span>` : `<span class="badge red">لم تُزر بعد</span>`}
