@@ -112,10 +112,14 @@ jobs:
         run: |
           "$GODOT_BIN" --headless --path godot-game --import
 
+      # NOTE: the export output path is resolved relative to the project
+      # dir, so run from inside godot-game (matching the preset's
+      # export_path "export/omar-yassin-3d.apk").
       - name: Export Android APK (debug)
+        working-directory: godot-game
         run: |
-          mkdir -p godot-game/export
-          "$GODOT_BIN" --headless --path godot-game --export-debug Android godot-game/export/omar-yassin-3d.apk
+          mkdir -p export
+          "$GODOT_BIN" --headless --path . --export-debug Android export/omar-yassin-3d.apk
 
       - name: Verify APK
         run: |
