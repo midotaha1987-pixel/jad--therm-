@@ -513,6 +513,8 @@ function giftIcon(icon) {
   if (icon === "bag") return s + `<path d="M5 8h14l-1.2 12.2a1.5 1.5 0 0 1-1.5 1.3H7.7a1.5 1.5 0 0 1-1.5-1.3L5 8z"/><path d="M8.5 10V6.5a3.5 3.5 0 0 1 7 0V10"/><path d="M9.5 13.5h5"/>` + e;
   if (icon === "welder") return s + `<rect x="2.5" y="7" width="13" height="10" rx="2"/><circle cx="9" cy="12" r="2.6"/><path d="M12.2 12h.01"/><path d="M15.5 10.5H18l2.5 2.5v4.5"/><path d="M6 7V4.5h6V7"/>` + e;
   if (icon === "drill") return s + `<path d="M3 8.5h8.5v5H9.5l-.8 4.5a1 1 0 0 1-1 .8h-.9a1 1 0 0 1-1-.8L6.6 13.5H3z"/><path d="M11.5 9.5H18l2.5 2-2.5 2h-6.5"/><path d="M20.5 11.5h.01"/>` + e;
+  // motorcycle — موتوسيكل فيجوري VLR 200 CBF
+  if (icon === "motorcycle") return s + `<circle cx="5.5" cy="17" r="3"/><circle cx="18.5" cy="17" r="3"/><path d="M5.5 17 8.5 9.5H12l3 7.5"/><path d="M12 9.5 14 6.5h2.5"/><path d="M15.5 9.5 18.5 17"/>` + e;
   // mosque — رحلة العمرة
   return s + `<path d="M12 2.5c1.9 1.9 3.8 3.4 3.8 5.7H8.2c0-2.3 1.9-3.8 3.8-5.7z"/><path d="M12 2.5V1.8"/><path d="M3.5 21v-7.5h17V21"/><path d="M5.5 13.5V9.8M18.5 13.5V9.8"/><path d="M8.2 16.5h7.6"/>` + e;
 }
@@ -522,12 +524,7 @@ async function vGifts() {
   const isTech = ME.role === "technician";
   const badge = (s) => `<span class="badge ${s === "approved" ? "green" : s === "rejected" ? "red" : "amber"}">${GIFT_STATUS_AR[s] || s}</span>`;
   let h = `<div class="card"><h2>🎁 كتالوج الهدايا</h2>
-    <div class="stat"><b>${fmt(d.myPoints)}</b><span>رصيد نقاطك (النقطة = 1 ج)</span></div>
-    <div class="card mt" style="box-shadow:none"><h3>كيف تجمع النقاط؟</h3>
-      <p>من كل عرض سباك: <b>25% من أجرة السباك</b> تتحول لنقاط — والمواسير <b>1.5% فقط</b> من أجرتها.
-      وكل <b>نقطة = 1 جنيه</b> في الهدايا.</p>
-      <p class="muted">مثال: أجرة سباك 1,600 ج = 400 نقطة = المقص البولي الكبير 🎁 — والنقاط لا تُخصم إلا بعد اعتماد الأدمن لطلب الهدية.</p>
-    </div>
+    <div class="stat"><b>${fmt(d.myPoints)}</b><span>رصيد نقاطك</span></div>
     <div class="gift-grid">${d.gifts.map(g => {
       const pct = Math.min(100, Math.round(d.myPoints / g.points * 100));
       const can = isTech && d.myPoints >= g.points;
@@ -536,7 +533,6 @@ async function vGifts() {
         <div class="gift-icon">${giftIcon(g.icon)}</div>
         <b>${esc(g.name)}</b>
         <div class="gift-points">${fmt(g.points)} نقطة</div>
-        <div class="muted">تحتاج أجرة سباك إجمالية ${fmt(g.wage)} ج لجمعها</div>
         <div class="progress"><div class="progress-fill" style="width:${pct}%"></div></div>
         <div class="muted">${fmt(d.myPoints)} / ${fmt(g.points)} نقطة — ${pct}%</div>
         ${isTech

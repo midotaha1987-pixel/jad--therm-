@@ -33,17 +33,17 @@ const LABOR = {
 const PERCENT_RULE = { discount: 0.18, rate: 0.05 }; // white/gasket: price x0.82 x0.05
 const INSULATED_FALLBACK = 1.10;                    // +10% when no list ratio
 const POINTS = { normal: 0.25, pipe: 0.015 };       // 25% / pipes 1.5%
-// كتالوج الهدايا — النقاط = الجنيه (1 نقطة = 1 ج)؛ النقاط تُجمع بنسبة 25% من
-// أجرة السباك (المواسير 1.5%)، فـ wage = points × 4. قيم ثابتة من فلاير «سباك جاد»
-// بعد تطبيق قاعدة النقاط الخاصة بالتطبيق (وليس أرقام النقاط المطبوعة على الفلاير).
+// كتالوج الهدايا — قيم النقاط النهائية المعتمدة من روني (2026-11-18)؛
+// الهدية تُعرض مقابل عدد نقاطها فقط، بدون أي عمود أجرة.
 const GIFTS = [
-  { key: "scissors_small", name: "المقص البولي الصغير", points: 150, wage: 600, icon: "scissors" },
-  { key: "scissors_big", name: "المقص البولي الكبير", points: 400, wage: 1600, icon: "scissors" },
-  { key: "tool_bag", name: "شنطة العدة", points: 600, wage: 2400, icon: "bag" },
-  { key: "welder_medium", name: "ماكينة لحام متوسطة", points: 1200, wage: 4800, icon: "welder" },
-  { key: "welder_big", name: "ماكينة لحام كبيرة", points: 1900, wage: 7600, icon: "welder" },
-  { key: "hilti", name: "هيلتي", points: 6500, wage: 26000, icon: "drill" },
-  { key: "umrah", name: "رحلة العمرة", points: 37000, wage: 148000, icon: "mosque" },
+  { key: "scissors_small", name: "المقص البولي الصغير", points: 50, icon: "scissors" },
+  { key: "scissors_big", name: "المقص البولي الكبير", points: 100, icon: "scissors" },
+  { key: "tool_bag", name: "شنطة العدة", points: 150, icon: "bag" },
+  { key: "welder_medium", name: "ماكينة لحام متوسطة", points: 300, icon: "welder" },
+  { key: "welder_big", name: "ماكينة لحام كبيرة", points: 475, icon: "welder" },
+  { key: "hilti", name: "هيلتي", points: 1625, icon: "drill" },
+  { key: "umrah", name: "رحلة العمرة", points: 9500, icon: "mosque" },
+  { key: "motorcycle", name: "موتوسيكل فيجوري VLR 200 CBF موديل 2026", points: 12500, icon: "motorcycle" },
 ];
 // زيادة التأخير عند صرف الكوبون — متدرجة حسب المدة من الإصدار لحد الصرف (Rony 2026-11-17)
 // قيمة الكوبون: شهر +5%، 3 شهور +10%، 6 شهور +15%، 9 شهور +20%، 12 شهر +25% (حد أقصى)
