@@ -36,14 +36,14 @@ const POINTS = { normal: 0.25, pipe: 0.015 };       // 25% / pipes 1.5%
 // كتالوج الهدايا — قيم النقاط النهائية المعتمدة من روني (2026-11-18)؛
 // الهدية تُعرض مقابل عدد نقاطها فقط، بدون أي عمود أجرة.
 const GIFTS = [
-  { key: "scissors_small", name: "المقص البولي الصغير", points: 50, icon: "scissors" },
-  { key: "scissors_big", name: "المقص البولي الكبير", points: 100, icon: "scissors" },
-  { key: "tool_bag", name: "شنطة العدة", points: 150, icon: "bag" },
-  { key: "welder_medium", name: "ماكينة لحام متوسطة", points: 300, icon: "welder" },
-  { key: "welder_big", name: "ماكينة لحام كبيرة", points: 475, icon: "welder" },
-  { key: "hilti", name: "هيلتي", points: 1625, icon: "drill" },
-  { key: "umrah", name: "رحلة العمرة", points: 9500, icon: "mosque" },
-  { key: "motorcycle", name: "موتوسيكل فيجوري VLR 200 CBF موديل 2026", points: 12500, icon: "motorcycle" },
+  { key: "scissors_small", name: "المقص البولي الصغير", points: 10000, icon: "scissors" },
+  { key: "scissors_big", name: "المقص البولي الكبير", points: 20000, icon: "scissors" },
+  { key: "tool_bag", name: "شنطة العدة", points: 25000, icon: "bag" },
+  { key: "welder_medium", name: "ماكينة لحام متوسطة", points: 50000, icon: "welder" },
+  { key: "welder_big", name: "ماكينة لحام كبيرة", points: 100000, icon: "welder" },
+  { key: "hilti", name: "هيلتي", points: 350000, icon: "drill" },
+  { key: "umrah", name: "رحلة العمرة", points: 950000, icon: "mosque" },
+  { key: "motorcycle", name: "موتوسيكل فيجوري VLR 200 CBF موديل 2026", points: 1500000, icon: "motorcycle" },
 ];
 // زيادة التأخير عند صرف الكوبون — متدرجة حسب المدة من الإصدار لحد الصرف (Rony 2026-11-17)
 // قيمة الكوبون: شهر +5%، 3 شهور +10%، 6 شهور +15%، 9 شهور +20%، 12 شهر +25% (حد أقصى)
