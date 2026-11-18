@@ -14,6 +14,13 @@ let ME = null;
 let TAB = "home";
 let PRODUCTS = [], PARTIES = [], WAREHOUSES = [], BRANDS = [], CATEGORIES = [], SETTINGS = {}, COMPONENTS = [];
 let prodSection = "", prodBrand = "", prodQuery = "";
+let prodWhId = 0, prodWhName = "";
+let partyFilter = "", partyDetailId = 0, partyDetailFields = [];
+let INVS = [], invFilter = "", PURS = [], purFilter = "";
+let DEBT_SUMMARY = null, DEBT_ENTRIES = [], debtPartyFilter = "", debtEntryFilter = "";
+let SHORTAGES = [], shortFilter = "", DEBT_REP = [], debtRepFilter = "";
+let KH_ENTRIES = [], khFilter = "";
+let EXPENSES = [], exFilter = "";
 let cart = []; // فاتورة جديدة: {productId, name, qty, unitPrice}
 let purCart = []; // مشتريات: {productId, name, qty, unitPrice}
 
@@ -113,6 +120,7 @@ async function vHome() {
   ]);
   const overdue = rem.overdue || [];
   return `
+  <img class="brand-banner home" src="/brand-banner.jpg" alt="معرض الرضوان — شعارات الماركات">
   <h2>أهلاً ${esc(ME.name)} 👋</h2>
   <div class="grid">
     <div class="stat"><b>${fmt(cash.invoices.paid)} ج</b><span>مبيعات نقدية اليوم (${cash.invoices.n} فاتورة)</span></div>
@@ -140,7 +148,11 @@ async function remindParty(id, name, phone) {
 
 // ---------------- المنتجات ----------------
 async function vProducts() {
-  const j = await api("GET", "/api/products?warehouseId=" + (WAREHOUSES[0] ? WAREHOUSES[0].id : 1));
+  // المخزون المعروض افتراضياً من المخزن الرئيسي — حيث أرصدة لستة المعرض
+  const mainWh = WAREHOUSES.find(w => w.name.includes("الرئيسي")) || WAREHOUSES[0];
+  prodWhId = mainWh ? mainWh.id : 1;
+  prodWhName = mainWh ? mainWh.name : "";
+  const j = await api("GET", "/api/products?warehouseId=" + prodWhId);
   PRODUCTS = j.products;
   return `
   <h2>المنتجات (${j.count})</h2>
@@ -171,12 +183,10 @@ function renderProducts() {
   return list.map(p => `
   <div class="card">
     <h3>${esc(p.name)} <span class="muted">${esc(p.size)}</span></h3>
-    <div class="muted">${esc(SECTION_AR[p.section] || p.section)} • باركود: ${esc(p.barcode || "—")} • مخزون المعرض: ${fmt(p.stock ?? 0)}</div>
-    <div class="price-line"><span>سعر اللستة</span><b>${fmt(p.list_price)} ج</b></div>
-    <div class="price-line"><span>آخر سعر شراء (تجاري)</span><b>${fmt(p.tradePrice)} ج</b></div>
-    <div class="price-line"><span>سعر مميز (خصم ${SETTINGS.pricing_premium || 18}%)</span><b>${fmt(p.premiumPrice)} ج</b></div>
-    <div class="price-line"><span>سعر قطاعي (خصم ${SETTINGS.pricing_retail || 12}%)</span><b>${fmt(p.retailPrice)} ج</b></div>
-    <div class="price-line"><span>الهامش (قطاعي − شراء)</span><b>${fmt(p.margin)} ج (${fmt(p.marginPct)}%)</b></div>
+    <div class="muted">${esc(SECTION_AR[p.section] || p.section)} • باركود: ${esc(p.barcode || "—")} • المخزون (${esc(prodWhName)}): ${fmt(p.stock ?? 0)}</div>
+    <div class="price-line"><span>سعر الشراء</span><b>${fmt(p.last_purchase_price)} ج</b></div>
+    <div class="price-line"><span>سعر مميز</span><b>${fmt(p.premiumPrice)} ج</b></div>
+    <div class="price-line"><span>سعر تجاري</span><b>${fmt(p.tradePrice)} ج</b></div>
     ${isAdmin() ? `<div class="row mt"><button class="btn small ghost" onclick="editPrice(${p.id})">✏️ تعديل السعر</button></div>` : ""}
   </div>`).join("");
 }
@@ -189,18 +199,20 @@ function setProdSection(s) { prodSection = s; showTab("products"); }
 function setProdBrand(b) { prodBrand = b; showTab("products"); }
 async function editPrice(id) {
   const p = PRODUCTS.find(x => x.id === id);
-  const v = prompt(`سعر اللستة الحالي: ${p.list_price}\nاكتب سعر اللستة الجديد لـ ${p.name} ${p.size}:`, p.list_price);
-  if (v == null || v === "") return;
-  const lp = prompt(`آخر سعر شراء الحالي: ${p.last_purchase_price}\nاكتب آخر سعر شراء الجديد (اتركه كما هو لو لم يتغير):`, p.last_purchase_price);
-  if (lp == null) return;
-  await api("PUT", "/api/products/" + id, { list_price: Number(v), last_purchase_price: Number(lp) });
-  alert("تم تحديث السعر وتسجيله في سجل تغيير الأسعار.");
+  const pur = prompt(`سعر الشراء الحالي: ${fmt(p.last_purchase_price)} ج\nاكتب سعر الشراء الجديد لـ ${p.name}:`, p.last_purchase_price);
+  if (pur == null || pur === "") return;
+  const prem = prompt(`سعر مميز الحالي: ${fmt(p.premiumPrice)} ج\nاكتب السعر المميز الجديد (اتركه كما هو لو لم يتغير):`, p.premiumPrice);
+  if (prem == null) return;
+  const tr = prompt(`سعر تجاري الحالي: ${fmt(p.tradePrice)} ج\nاكتب السعر التجاري الجديد (اتركه كما هو لو لم يتغير):`, p.tradePrice);
+  if (tr == null) return;
+  await api("PUT", "/api/products/" + id, { last_purchase_price: Number(pur), explicit_premium: Number(prem), explicit_trade: Number(tr) });
+  alert("تم تحديث الأسعار.");
   showTab("products");
 }
 
 // ---------------- الفواتير ----------------
 async function vInvoices() {
-  const invs = (await api("GET", "/api/invoices")).invoices;
+  INVS = (await api("GET", "/api/invoices")).invoices;
   const customers = PARTIES.filter(p => p.type === "customer");
   const plumbers = PARTIES.filter(p => p.type === "plumber");
   const bundles = (await api("GET", "/api/bundles")).bundles;
@@ -208,9 +220,12 @@ async function vInvoices() {
   <h2>فاتورة جديدة</h2>
   <div class="card">
     <div class="row">
+      <input id="invCustQ" placeholder="ابحث عن زبون بالاسم..." oninput="filterInvCustomers()" style="flex:1">
+    </div>
+    <div class="row mt">
       <select id="invCustomer">${customers.map(c => `<option value="${c.id}">${esc(c.name)}${c.balance ? ` (مديونية ${fmt(c.balance)} ج)` : ""}</option>`).join("") || `<option value="">لا يوجد زباين — أضف من تبويب الأطراف</option>`}</select>
       <select id="invType"><option value="trade">تجاري</option><option value="premium">مميز</option><option value="retail">قطاعي</option></select>
-      <select id="invWarehouse">${WAREHOUSES.map(w => `<option value="${w.id}">${esc(w.name)}</option>`).join("")}</select>
+      <select id="invWarehouse">${WAREHOUSES.map(w => `<option value="${w.id}" ${w.name.includes("الرئيسي") ? "selected" : ""}>${esc(w.name)}</option>`).join("")}</select>
     </div>
     <div class="row mt">
       <select id="invPlumber"><option value="">بدون سباك</option>${plumbers.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select>
@@ -231,9 +246,25 @@ async function vInvoices() {
     <div id="invMsg" class="mt"></div>
   </div>
   <h3>آخر الفواتير</h3>
-  ${invs.slice(0, 20).map(i => `<div class="card"><div class="price-line"><span>فاتورة #${i.id} — ${esc(i.customer_name || "")} (${CUST_AR[i.customer_type] || i.customer_type})</span><b>${fmt(i.total)} ج</b></div>
+  <div class="searchbox">
+    <input id="invFilter" placeholder="فلترة الفواتير بالزبون أو رقم الفاتورة..." value="${esc(invFilter)}" oninput="invFilter=this.value;renderInvList()">
+  </div>
+  <div id="invListBox" class="mt">${renderInvList()}</div>`;
+}
+function filterInvCustomers() {
+  const q = ($("#invCustQ").value || "").trim();
+  const sel = $("#invCustomer");
+  const list = PARTIES.filter(p => p.type === "customer" && (!q || p.name.includes(q)));
+  sel.innerHTML = list.map(c => `<option value="${c.id}">${esc(c.name)}${c.balance ? ` (مديونية ${fmt(c.balance)} ج)` : ""}</option>`).join("") || `<option value="">لا يوجد زبون بهذا الاسم</option>`;
+}
+function renderInvList() {
+  const list = INVS.filter(i => !invFilter || ((i.customer_name || "") + " #" + i.id).includes(invFilter)).slice(0, 20);
+  const box = $("#invListBox");
+  const html = list.map(i => `<div class="card"><div class="price-line"><span>فاتورة #${i.id} — ${esc(i.customer_name || "")} (${CUST_AR[i.customer_type] || i.customer_type})</span><b>${fmt(i.total)} ج</b></div>
   <div class="muted">مدفوع ${fmt(i.paid)} ج • متبقي ${fmt(i.total - i.paid)} ج • ${esc((i.created_at || "").slice(0, 16))}</div>
-  <button class="btn small wa" onclick="shareInvoiceText(${i.id})">📲 واتساب</button></div>`).join("") || `<p class="muted">لا توجد فواتير بعد.</p>`}`;
+  <button class="btn small wa" onclick="shareInvoiceText(${i.id})">📲 واتساب</button></div>`).join("") || `<p class="muted">لا توجد فواتير مطابقة.</p>`;
+  if (box) box.innerHTML = html;
+  return html;
 }
 function renderCart() {
   if (!cart.length) return `<p class="muted">السلة فارغة.</p>`;
@@ -289,7 +320,7 @@ function shareInvoiceWa() { alert("احفظ الفاتورة أولاً، ثم �
 
 // ---------------- المشتريات ----------------
 async function vPurchases() {
-  const purs = (await api("GET", "/api/purchases")).purchases;
+  PURS = (await api("GET", "/api/purchases")).purchases;
   const suppliers = PARTIES.filter(p => p.type === "supplier");
   return `
   <h2>مشتريات جديدة</h2>
@@ -309,8 +340,18 @@ async function vPurchases() {
     <p class="muted">حفظ المشتريات يضيف الكمية للمخزون ويحدّث «آخر سعر شراء» للصنف (ويُسجَّل في سجل تغيير الأسعار).</p>
   </div>
   <h3>آخر المشتريات</h3>
-  ${purs.slice(0, 20).map(p => `<div class="card"><div class="price-line"><span>مشتريات #${p.id} — ${esc(p.supplier_name || "")}</span><b>${fmt(p.total)} ج</b></div>
-  <div class="muted">مدفوع ${fmt(p.paid)} ج • متبقي للمورد ${fmt(p.total - p.paid)} ج • ${esc((p.created_at || "").slice(0, 16))}</div></div>`).join("") || `<p class="muted">لا توجد مشتريات بعد.</p>`}`;
+  <div class="searchbox">
+    <input id="purFilter" placeholder="فلترة المشتريات بالمورد أو رقمها..." value="${esc(purFilter)}" oninput="purFilter=this.value;renderPurList()">
+  </div>
+  <div id="purListBox" class="mt">${renderPurList()}</div>`;
+}
+function renderPurList() {
+  const list = PURS.filter(p => !purFilter || ((p.supplier_name || "") + " #" + p.id).includes(purFilter)).slice(0, 20);
+  const box = $("#purListBox");
+  const html = list.map(p => `<div class="card"><div class="price-line"><span>مشتريات #${p.id} — ${esc(p.supplier_name || "")}</span><b>${fmt(p.total)} ج</b></div>
+  <div class="muted">مدفوع ${fmt(p.paid)} ج • متبقي للمورد ${fmt(p.total - p.paid)} ج • ${esc((p.created_at || "").slice(0, 16))}</div></div>`).join("") || `<p class="muted">لا توجد مشتريات مطابقة.</p>`;
+  if (box) box.innerHTML = html;
+  return html;
 }
 function renderPurCart() {
   if (!purCart.length) return `<p class="muted">السلة فارغة.</p>`;
@@ -347,8 +388,9 @@ async function submitPurchase() {
 
 // ---------------- المديونيات ----------------
 async function vDebts() {
-  const s = await api("GET", "/api/debts/summary");
-  const entries = (await api("GET", "/api/debts")).debts;
+  DEBT_SUMMARY = await api("GET", "/api/debts/summary");
+  DEBT_ENTRIES = (await api("GET", "/api/debts")).debts;
+  const s = DEBT_SUMMARY;
   return `
   <h2>المديونيات</h2>
   <div class="grid">
@@ -356,7 +398,10 @@ async function vDebts() {
     <div class="stat"><b>${fmt(s.weOwe)} ج</b><span>علينا للموردين</span></div>
   </div>
   <div class="card mt"><h3>أرصدة الأطراف</h3>
-  ${s.parties.map(p => `<div class="price-line"><span>${esc(p.name)} (${TYPE_AR[p.type] || p.type})</span><b>${fmt(p.balance)} ج</b></div>`).join("") || `<p class="muted">لا توجد مديونيات — الكل صفر.</p>`}
+    <div class="searchbox">
+      <input id="debtPartyFilter" placeholder="فلترة الأطراف بالاسم أو التليفون..." value="${esc(debtPartyFilter)}" oninput="debtPartyFilter=this.value;renderDebtParties()">
+    </div>
+    <div id="debtPartiesBox" class="mt">${renderDebtParties()}</div>
   </div>
   <div class="card"><h3>تسجيل دفعة / قيد</h3>
     <div class="row">
@@ -368,7 +413,29 @@ async function vDebts() {
     <div id="debtMsg" class="mt"></div>
   </div>
   <h3>آخر الحركات</h3>
-  ${entries.slice(0, 30).map(d => `<div class="card"><div class="price-line"><span>${esc(d.party_name || "")} — ${d.kind === "payment" ? "تحصيل" : d.kind === "sale" ? "فاتورة" : d.kind === "purchase" ? "مشتريات" : "قيد"}</span><b>${fmt(d.amount)} ج</b></div><div class="muted">${esc(d.note || "")} • ${esc((d.created_at || "").slice(0, 16))}</div></div>`).join("")}`;
+  <div class="searchbox">
+    <input id="debtEntryFilter" placeholder="فلترة الحركات بالاسم أو الملاحظة..." value="${esc(debtEntryFilter)}" oninput="debtEntryFilter=this.value;renderDebtEntries()">
+  </div>
+  <div id="debtEntriesBox" class="mt">${renderDebtEntries()}</div>`;
+}
+function renderDebtParties() {
+  const s = DEBT_SUMMARY || { parties: [] };
+  const list = s.parties.filter(p => !debtPartyFilter || ((p.name || "") + " " + (p.phone || "") + " " + (p.address || "")).includes(debtPartyFilter));
+  const box = $("#debtPartiesBox");
+  const html = list.map(p => `<div class="price-line"><span>${esc(p.name)} (${TYPE_AR[p.type] || p.type})</span><span><b>${fmt(p.balance)} ج</b> <button class="btn small ghost" onclick="openPartyFromDebts(${p.id})">⚙️ إدارة</button></span></div>`).join("") || `<p class="muted">لا توجد مديونيات مطابقة.</p>`;
+  if (box) box.innerHTML = html;
+  return html;
+}
+function renderDebtEntries() {
+  const list = DEBT_ENTRIES.filter(d => !debtEntryFilter || ((d.party_name || "") + " " + (d.note || "")).includes(debtEntryFilter)).slice(0, 30);
+  const box = $("#debtEntriesBox");
+  const html = list.map(d => `<div class="card"><div class="price-line"><span>${esc(d.party_name || "")} — ${d.kind === "payment" ? "تحصيل" : d.kind === "sale" ? "فاتورة" : d.kind === "purchase" ? "مشتريات" : d.kind === "import" ? "رصيد افتتاحي" : d.kind === "adjust" ? "تعديل رصيد" : "قيد"}</span><b>${fmt(d.amount)} ج</b></div><div class="muted">${esc(d.note || "")} • ${esc((d.created_at || "").slice(0, 16))}</div></div>`).join("") || `<p class="muted">لا توجد حركات مطابقة.</p>`;
+  if (box) box.innerHTML = html;
+  return html;
+}
+async function openPartyFromDebts(id) {
+  await showTab("parties");
+  openPartyDetail(id);
 }
 async function submitDebt() {
   const msg = $("#debtMsg");
@@ -385,13 +452,15 @@ async function submitDebt() {
 
 // ---------------- الأطراف ----------------
 async function vParties() {
-  const plumbers = PARTIES.filter(p => p.type === "plumber");
-  const customers = PARTIES.filter(p => p.type === "customer");
-  const suppliers = PARTIES.filter(p => p.type === "supplier");
   const grp = (title, list) => `<div class="card"><h3>${title} (${list.length})</h3>` +
-    (list.map(p => `<div class="price-line"><span>${esc(p.name)} ${p.demo ? `<span class="badge gold">تجريبي — قابل للحذف</span>` : ""}<br><span class="muted">${esc(p.phone || "")} ${esc(p.address || "")} • نقاط ${fmt(p.points)}</span></span><b>${fmt(p.balance)} ج</b></div>`).join("") || `<p class="muted">لا يوجد.</p>`) + `</div>`;
+    (list.map(p => `<div class="price-line"><span>${esc(p.name)} ${p.demo ? `<span class="badge gold">تجريبي — قابل للحذف</span>` : ""}<br><span class="muted">${esc(p.phone || "")} ${esc(p.address || "")} • نقاط ${fmt(p.points)}</span></span><span><b>${fmt(p.balance)} ج</b> <button class="btn small ghost" onclick="openPartyDetail(${p.id})">⚙️ إدارة</button></span></div>`).join("") || `<p class="muted">لا يوجد.</p>`) + `</div>`;
+  window.__partyGrp = grp;
   return `
   <h2>الزباين والأطراف</h2>
+  <div class="searchbox">
+    <input id="partyFilter" placeholder="فلترة الأطراف بالاسم أو التليفون أو العنوان..." value="${esc(partyFilter)}" oninput="partyFilter=this.value;renderPartyGroups()">
+  </div>
+  <div id="partyDetailBox" class="mt">${partyDetailId ? "" : ""}</div>
   <div class="card"><h3>➕ إضافة طرف</h3>
     <div class="row">
       <input id="npName" placeholder="الاسم">
@@ -409,9 +478,108 @@ async function vParties() {
     <div class="row mt"><button class="btn" onclick="importParties()">استيراد</button></div>
     <div id="impMsg" class="mt"></div>
   </div>
-  ${grp("🧑‍🔧 السباكون", plumbers)}
-  ${grp("🏪 الزباين", customers)}
-  ${grp("🚚 الموردون", suppliers)}`;
+  <div id="partyGroupsBox">${renderPartyGroups()}</div>`;
+}
+function renderPartyGroups() {
+  const grp = window.__partyGrp;
+  if (!grp) return "";
+  const match = (p) => !partyFilter || ((p.name || "") + " " + (p.phone || "") + " " + (p.address || "")).includes(partyFilter);
+  const html = grp("🧑‍🔧 السباكون", PARTIES.filter(p => p.type === "plumber" && match(p)))
+    + grp("🏪 الزباين", PARTIES.filter(p => p.type === "customer" && match(p)))
+    + grp("🚚 الموردون", PARTIES.filter(p => p.type === "supplier" && match(p)));
+  const box = $("#partyGroupsBox");
+  if (box) box.innerHTML = html;
+  return html;
+}
+// بطاقة إدارة الطرف: المبلغ والعنوان ورقم الهاتف قابلة للتعديل + خانات مخصصة
+async function openPartyDetail(id) {
+  partyDetailId = id;
+  const j = await api("GET", "/api/parties/" + id);
+  const p = j.party;
+  partyDetailFields = j.fields || [];
+  const box = $("#partyDetailBox");
+  if (!box) return;
+  box.innerHTML = `
+  <div class="card">
+    <h3>⚙️ إدارة: ${esc(p.name)} (${TYPE_AR[p.type] || p.type})</h3>
+    <div class="row">
+      <label style="flex:1">المبلغ (المديونية) <input id="pdBalance" type="number" value="${p.balance}"></label>
+      <label style="flex:1">رقم الهاتف <input id="pdPhone" type="tel" value="${esc(p.phone || "")}"></label>
+    </div>
+    <div class="row mt">
+      <label style="flex:1">العنوان <input id="pdAddress" value="${esc(p.address || "")}"></label>
+      <label style="flex:1">تليفون 2 <input id="pdPhone2" type="tel" value="${esc(p.phone2 || "")}"></label>
+    </div>
+    <div class="row mt">
+      <label style="flex:1">الفئة <input id="pdCategory" value="${esc(p.category || "")}"></label>
+      <label style="flex:1">المدينة <input id="pdCity" value="${esc(p.city || "")}"></label>
+    </div>
+    <div class="row mt"><label style="flex:1">ملاحظات <input id="pdNotes" value="${esc(p.notes || "")}"></label></div>
+    <p class="muted">تعديل المبلغ يُسجَّل كقيد تعديل في سجل المديونية.</p>
+    <div class="row mt">
+      <button class="btn" onclick="savePartyDetail(${p.id})">💾 حفظ التعديلات</button>
+      ${p.phone ? `<a class="btn wa" href="https://wa.me/${esc(p.phone.replace(/[^0-9]/g, ""))}" target="_blank">📲 واتساب</a>` : ""}
+      <button class="btn danger" onclick="delParty(${p.id})">🗑️ حذف الطرف</button>
+    </div>
+    <div id="pdMsg" class="mt"></div>
+    <h4 class="mt">📌 خانات إضافية</h4>
+    <div id="pdFields">${renderPartyFields()}</div>
+    <div class="row mt">
+      <input id="pdNewFieldName" placeholder="اسم الخانة (مثال: رقم البطاقة)">
+      <input id="pdNewFieldValue" placeholder="القيمة">
+      <button class="btn gold" onclick="addPartyField(${p.id})">+ إضافة خانة</button>
+    </div>
+  </div>`;
+  box.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+function renderPartyFields() {
+  if (!partyDetailFields.length) return `<p class="muted">لا توجد خانات إضافية — أضف أي خانة تحتاجها (مثال: رقم البطاقة، اسم المحل، منطقة التوصيل).</p>`;
+  return partyDetailFields.map(f => `<div class="price-line"><span><b>${esc(f.field_name)}:</b> ${esc(f.field_value)}</span><span><button class="btn small ghost" onclick="editPartyField(${f.id}, ${partyDetailId})">✏️</button> <button class="btn small danger" onclick="delPartyField(${f.id}, ${partyDetailId})">🗑️</button></span></div>`).join("");
+}
+async function savePartyDetail(id) {
+  const msg = $("#pdMsg");
+  try {
+    await api("PUT", "/api/parties/" + id, {
+      balance: Number($("#pdBalance").value),
+      phone: $("#pdPhone").value.trim(), address: $("#pdAddress").value.trim(),
+      phone2: $("#pdPhone2").value.trim(), category: $("#pdCategory").value.trim(),
+      city: $("#pdCity").value.trim(), notes: $("#pdNotes").value.trim(),
+    });
+    msg.innerHTML = `<div class="ok">✅ تم حفظ التعديلات.</div>`;
+    await loadLookups();
+    setTimeout(() => showTab("parties"), 900);
+  } catch (e) { msg.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+async function delParty(id) {
+  if (!confirm("حذف هذا الطرف نهائياً؟ (لا يمكن حذفه وعليه مديونية)")) return;
+  try {
+    await api("DELETE", "/api/parties/" + id);
+    partyDetailId = 0;
+    await loadLookups();
+    showTab("parties");
+  } catch (e) { alert(e.message); }
+}
+async function addPartyField(id) {
+  const name = ($("#pdNewFieldName").value || "").trim();
+  const value = ($("#pdNewFieldValue").value || "").trim();
+  if (!name) { alert("اكتب اسم الخانة أولاً."); return; }
+  await api("POST", "/api/parties/" + id + "/fields", { name, value });
+  openPartyDetail(id);
+}
+async function editPartyField(fid, pid) {
+  const f = partyDetailFields.find(x => x.id === fid);
+  if (!f) return;
+  const name = prompt("اسم الخانة:", f.field_name);
+  if (name == null) return;
+  const value = prompt("قيمة الخانة:", f.field_value);
+  if (value == null) return;
+  await api("PUT", "/api/party-fields/" + fid, { name, value });
+  openPartyDetail(pid);
+}
+async function delPartyField(fid, pid) {
+  if (!confirm("حذف هذه الخانة؟")) return;
+  await api("DELETE", "/api/party-fields/" + fid);
+  openPartyDetail(pid);
 }
 async function addParty() {
   const msg = $("#npMsg");
@@ -436,6 +604,7 @@ async function vKhaled() {
     <div class="locked"><div style="font-size:40px">🔒</div><h3>دفتر خاص</h3>
     <p>هذا الدفتر يراه الشيخ خالد البسيوني وروني فقط.<br>«أخد من مين / رجّع لمين» بالتواريخ — إدخال صوتي بدون كتابة من زر الميكروفون 🎤.</p></div>`;
   const j = await api("GET", "/api/khaled-ledger");
+  KH_ENTRIES = j.entries;
   return `
   <h2>دفتر الشيخ خالد 🔒</h2>
   <div class="grid">
@@ -454,7 +623,17 @@ async function vKhaled() {
     <button class="btn gold" onclick="voiceKhaled()">🎤 إدخال صوتي</button></div>
     <div id="khMsg" class="mt"></div>
   </div>
-  ${j.entries.map(e => `<div class="card"><div class="price-line"><span>${e.kind === "in" ? "⬇️ أخد" : "⬆️ رجّع"} — من ${esc(e.from_party || "—")} إلى ${esc(e.to_party || "—")}</span><b>${fmt(e.amount)} ج</b></div><div class="muted">${esc(e.note || "")} • ${esc((e.created_at || "").slice(0, 16))} • ${esc(e.created_by_name || "")}</div>${canKhaled() ? `<div class="mt"><button class="btn danger small" onclick="delKhaled(${e.id})">🗑️ حذف القيد</button></div>` : ""}</div>`).join("") || `<p class="muted">الدفتر فارغ.</p>`}`;
+  <div class="searchbox">
+    <input id="khFilter" placeholder="فلترة القيود بالاسم أو الملاحظة..." value="${esc(khFilter)}" oninput="khFilter=this.value;renderKhaledEntries()">
+  </div>
+  <div id="khEntriesBox" class="mt">${renderKhaledEntries()}</div>`;
+}
+function renderKhaledEntries() {
+  const list = KH_ENTRIES.filter(e => !khFilter || ((e.from_party || "") + " " + (e.to_party || "") + " " + (e.note || "")).includes(khFilter));
+  const box = $("#khEntriesBox");
+  const html = list.map(e => `<div class="card"><div class="price-line"><span>${e.kind === "in" ? "⬇️ أخد" : "⬆️ رجّع"} — من ${esc(e.from_party || "—")} إلى ${esc(e.to_party || "—")}</span><b>${fmt(e.amount)} ج</b></div><div class="muted">${esc(e.note || "")} • ${esc((e.created_at || "").slice(0, 16))} • ${esc(e.created_by_name || "")}</div>${canKhaled() ? `<div class="mt"><button class="btn danger small" onclick="delKhaled(${e.id})">🗑️ حذف القيد</button></div>` : ""}</div>`).join("") || `<p class="muted">لا توجد قيود مطابقة.</p>`;
+  if (box) box.innerHTML = html;
+  return html;
 }
 async function delKhaled(id) {
   if (!canKhaled()) return;
@@ -482,6 +661,7 @@ function voiceKhaled() { openVoice("khaled"); }
 async function vVault() {
   const v = await api("GET", "/api/vault");
   const ex = await api("GET", "/api/expenses");
+  EXPENSES = ex.expenses;
   const cats = (await api("GET", "/api/expense-categories")).categories;
   const todayExp = ex.expenses.filter(e => (e.created_at || "").slice(0, 10) === today()).reduce((a, e) => a + e.amount, 0);
   const budget = +SETTINGS.expense_daily_budget || 0;
@@ -513,7 +693,17 @@ async function vVault() {
     <div id="exMsg" class="mt"></div>
   </div>
   <h3>آخر المصاريف</h3>
-  ${ex.expenses.slice(0, 20).map(e => `<div class="card"><div class="price-line"><span>${esc(e.category_name || "")} — ${esc(e.note || "")}</span><b>${fmt(e.amount)} ج</b></div><div class="muted">${esc((e.created_at || "").slice(0, 16))}</div></div>`).join("") || `<p class="muted">لا توجد مصاريف.</p>`}`;
+  <div class="searchbox">
+    <input id="exFilter" placeholder="فلترة المصاريف بالتصنيف أو الملاحظة..." value="${esc(exFilter)}" oninput="exFilter=this.value;renderExpenses()">
+  </div>
+  <div id="exListBox" class="mt">${renderExpenses()}</div>`;
+}
+function renderExpenses() {
+  const list = EXPENSES.filter(e => !exFilter || ((e.category_name || "") + " " + (e.note || "")).includes(exFilter)).slice(0, 20);
+  const box = $("#exListBox");
+  const html = list.map(e => `<div class="card"><div class="price-line"><span>${esc(e.category_name || "")} — ${esc(e.note || "")}</span><b>${fmt(e.amount)} ج</b></div><div class="muted">${esc((e.created_at || "").slice(0, 16))}</div></div>`).join("") || `<p class="muted">لا توجد مصاريف مطابقة.</p>`;
+  if (box) box.innerHTML = html;
+  return html;
 }
 async function vaultOp(kind) {
   const msg = $("#vMsg");
@@ -590,15 +780,23 @@ async function vReports() {
   const debtText = `💳 تقرير مديونيات معرض الرضوان — ${today()}\n` + (debts.parties.map(p => `• ${p.name}: ${fmt(p.balance)} ج`).join("\n") || "لا توجد مديونيات.");
   const cashText = `💰 ملخص صندوق معرض الرضوان — ${today()}\nفواتير: ${fmt(cash.invoices.total)} ج (${cash.invoices.n})\nنقدية محصلة: ${fmt(cash.invoices.paid)} ج\nمشتريات: ${fmt(cash.purchases.total)} ج\nمصاريف: ${fmt(cash.expenses.total)} ج\nتحويل الخزنة التلقائي: ${fmt(cash.vaultAuto)} ج\nرصيد الخزنة: ${fmt(cash.vaultBalance)} ج`;
   const khaledPhone = (await api("GET", "/api/users").catch(() => ({ users: [] }))).users?.find(u => u.username === "khaled")?.phone || "";
+  SHORTAGES = short.shortages;
+  DEBT_REP = debts.parties;
   return `
   <h2>التقارير اليومية</h2>
   <div class="card"><h3>📦 تقرير النواقص (${short.shortages.length})</h3>
     <p class="muted">حد الطلب: ${short.threshold} — الكمية المقترحة = ضعف الحد − المتاح.</p>
-    ${short.shortages.slice(0, 30).map(p => `<div class="price-line"><span>${esc(p.name)} ${esc(p.size)} — ${esc(p.warehouse)} (متاح ${fmt(p.qty)})</span><b>اطلب ${fmt(p.suggestedQty)} ≈ ${fmt(p.suggestedCost)} ج</b></div>`).join("") || `<p class="muted">لا توجد نواقص.</p>`}
+    <div class="searchbox">
+      <input id="shortFilter" placeholder="فلترة النواقص بالاسم أو المخزن..." value="${esc(shortFilter)}" oninput="shortFilter=this.value;renderShortages()">
+    </div>
+    <div id="shortListBox" class="mt">${renderShortages()}</div>
     <div class="row mt"><a class="btn wa" href="${wa(shortText)}" target="_blank">📲 مشاركة واتساب (جروب المعرض)</a></div>
   </div>
   <div class="card"><h3>💳 تقرير المديونيات اليومي</h3>
-    ${debts.parties.map(p => `<div class="price-line"><span>${esc(p.name)}</span><b>${fmt(p.balance)} ج</b></div>`).join("") || `<p class="muted">لا توجد مديونيات.</p>`}
+    <div class="searchbox">
+      <input id="debtRepFilter" placeholder="فلترة المديونيات بالاسم..." value="${esc(debtRepFilter)}" oninput="debtRepFilter=this.value;renderDebtRep()">
+    </div>
+    <div id="debtRepBox" class="mt">${renderDebtRep()}</div>
     <div class="row mt">
       <a class="btn wa" href="${wa(debtText)}" target="_blank">📲 مشاركة واتساب (جروب المعرض)</a>
       ${khaledPhone ? `<a class="btn wa" href="${wa(debtText, khaledPhone)}" target="_blank">📲 إرسال للشيخ خالد</a>` : `<span class="muted">سجّل رقم واتساب الشيخ خالد من الإعدادات لإرسال التقرير له مباشرة.</span>`}
@@ -622,9 +820,24 @@ async function vReports() {
     <div id="priceLogBox" class="mt"></div>
   </div>`;
 }
+function renderShortages() {
+  const list = SHORTAGES.filter(p => !shortFilter || ((p.name || "") + " " + (p.warehouse || "")).includes(shortFilter)).slice(0, 30);
+  const box = $("#shortListBox");
+  const html = list.map(p => `<div class="price-line"><span>${esc(p.name)} ${esc(p.size)} — ${esc(p.warehouse)} (متاح ${fmt(p.qty)})</span><b>اطلب ${fmt(p.suggestedQty)} ≈ ${fmt(p.suggestedCost)} ج</b></div>`).join("") || `<p class="muted">لا توجد نواقص مطابقة.</p>`;
+  if (box) box.innerHTML = html;
+  return html;
+}
+function renderDebtRep() {
+  const list = DEBT_REP.filter(p => !debtRepFilter || (p.name || "").includes(debtRepFilter));
+  const box = $("#debtRepBox");
+  const html = list.map(p => `<div class="price-line"><span>${esc(p.name)}</span><b>${fmt(p.balance)} ج</b></div>`).join("") || `<p class="muted">لا توجد مديونيات مطابقة.</p>`;
+  if (box) box.innerHTML = html;
+  return html;
+}
 async function showPriceLog() {
   const j = await api("GET", "/api/price-log");
-  $("#priceLogBox").innerHTML = j.log.slice(0, 30).map(l => `<div class="price-line"><span>${esc(l.product_name || "")} — ${l.field === "list_price" ? "لستة" : "شراء"}: ${fmt(l.old_price)} ← ${fmt(l.new_price)} ج</span><span class="muted">${esc((l.created_at || "").slice(0, 16))} — ${esc(l.changed_by_name || "")}</span></div>`).join("") || `<p class="muted">لا توجد تغييرات مسجلة.</p>`;
+  const fieldAr = { list_price: "لستة", last_purchase_price: "شراء", explicit_trade: "تجاري", explicit_premium: "مميز", explicit_retail: "قطاعي" };
+  $("#priceLogBox").innerHTML = j.log.slice(0, 30).map(l => `<div class="price-line"><span>${esc(l.product_name || "")} — ${fieldAr[l.field] || "شراء"}: ${fmt(l.old_price)} ← ${fmt(l.new_price)} ج</span><span class="muted">${esc((l.created_at || "").slice(0, 16))} — ${esc(l.changed_by_name || "")}</span></div>`).join("") || `<p class="muted">لا توجد تغييرات مسجلة.</p>`;
 }
 
 // ---------------- الإعدادات ----------------
@@ -794,9 +1007,9 @@ async function runVoice() {
   if (prod.products && prod.products.length) {
     const p = prod.products[0];
     html += `<div class="card"><h3>${esc(p.name)} ${esc(p.size)}</h3>
+      <div class="price-line"><span>سعر الشراء</span><b>${fmt(p.last_purchase_price)} ج</b></div>
       <div class="price-line"><span>تجاري</span><b>${fmt(p.tradePrice)} ج</b></div>
-      <div class="price-line"><span>مميز</span><b>${fmt(p.premiumPrice)} ج</b></div>
-      <div class="price-line"><span>قطاعي</span><b>${fmt(p.retailPrice)} ج</b></div></div>`;
+      <div class="price-line"><span>مميز</span><b>${fmt(p.premiumPrice)} ج</b></div></div>`;
   }
   if (party) html += `<div class="card"><h3>${esc(party.name)}</h3><div class="price-line"><span>المديونية</span><b>${fmt(party.balance)} ج</b></div><div class="price-line"><span>النقاط</span><b>${fmt(party.points)}</b></div></div>`;
   box.innerHTML = html || `<p class="muted">لم أجد نتيجة لـ «${esc(text)}» — جرّب اسم منتج أو اسم زبون، أو قل «مصروف 50 جنيه».</p>`;
@@ -858,9 +1071,9 @@ async function lookupScanCode() {
     const j = await api("GET", "/api/products/barcode/" + encodeURIComponent(code));
     const p = j.product;
     box.innerHTML = `<div class="card"><h3>${esc(p.name)} ${esc(p.size)}</h3>
+      <div class="price-line"><span>سعر الشراء</span><b>${fmt(p.last_purchase_price)} ج</b></div>
       <div class="price-line"><span>تجاري</span><b>${fmt(p.tradePrice)} ج</b></div>
-      <div class="price-line"><span>مميز</span><b>${fmt(p.premiumPrice)} ج</b></div>
-      <div class="price-line"><span>قطاعي</span><b>${fmt(p.retailPrice)} ج</b></div></div>`;
+      <div class="price-line"><span>مميز</span><b>${fmt(p.premiumPrice)} ج</b></div></div>`;
   } catch (e) { box.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
 }
 

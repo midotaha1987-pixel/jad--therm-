@@ -144,11 +144,36 @@ CREATE TABLE IF NOT EXISTS reminders_log (
   note TEXT DEFAULT '', created_by INTEGER, reminded_at TEXT DEFAULT (datetime('now')),
   FOREIGN KEY(party_id) REFERENCES parties(id), FOREIGN KEY(created_by) REFERENCES users(id)
 );
+CREATE TABLE IF NOT EXISTS party_fields (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, party_id INTEGER NOT NULL,
+  field_name TEXT NOT NULL, field_value TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY(party_id) REFERENCES parties(id) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS components (
   key TEXT PRIMARY KEY, name TEXT NOT NULL, enabled INTEGER DEFAULT 1
 );
 `);
+
+// ---------------------------------------------------------------------------
+// ترحيلات خفيفة للأعمدة الجديدة (تُطبَّق على أي قاعدة موجودة — لستة المعرض 2026-11-18)
+// ---------------------------------------------------------------------------
+function addColumnIfMissing(table, column, ddl) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
+  if (!cols.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+}
+addColumnIfMissing("products", "item_number", "TEXT");
+addColumnIfMissing("products", "explicit_trade", "REAL");
+addColumnIfMissing("products", "explicit_premium", "REAL");
+addColumnIfMissing("products", "explicit_retail", "REAL");
+addColumnIfMissing("parties", "phone2", "TEXT DEFAULT ''");
+addColumnIfMissing("parties", "category", "TEXT DEFAULT ''");
+addColumnIfMissing("parties", "city", "TEXT DEFAULT ''");
+addColumnIfMissing("parties", "external_number", "TEXT DEFAULT ''");
+addColumnIfMissing("parties", "notes", "TEXT DEFAULT ''");
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_products_item_number ON products(item_number) WHERE item_number IS NOT NULL AND item_number != ''`);
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_parties_external_number ON parties(external_number) WHERE external_number IS NOT NULL AND external_number != ''`);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -174,21 +199,31 @@ function purchaseDiscount(section, s) {
   const map = { ppr: +s.pricing_ppr, white: +s.pricing_white, gasket: +s.pricing_gasket, other: +s.pricing_other };
   return (map[section] ?? 0) / 100;
 }
-function tradePrice(p, s) { return round2(p.last_purchase_price); }
-function premiumPrice(p, s) { return round2(p.list_price * (1 - (+s.pricing_premium || 18) / 100)); }
-function retailPrice(p, s) { return round2(p.list_price * (1 - (+s.pricing_retail || 12) / 100)); }
+// أسعار البيع: القيم الصريحة من لستة المعرض (إن وُجدت) تقدَّم على المحسوبة من اللستة
+function effPrices(p, s) {
+  const trade = p.explicit_trade != null ? round2(p.explicit_trade) : round2(p.last_purchase_price);
+  const premium = p.explicit_premium != null ? round2(p.explicit_premium)
+    : round2(p.list_price * (1 - (+s.pricing_premium || 18) / 100));
+  const retail = p.explicit_retail != null ? round2(p.explicit_retail)
+    : round2(p.list_price * (1 - (+s.pricing_retail || 12) / 100));
+  return { trade, premium, retail };
+}
+function tradePrice(p, s) { return effPrices(p, s).trade; }
+function premiumPrice(p, s) { return effPrices(p, s).premium; }
+function retailPrice(p, s) { return effPrices(p, s).retail; }
 function priceFor(p, type, s) {
-  if (type === "premium") return premiumPrice(p, s);
-  if (type === "retail") return retailPrice(p, s);
-  return tradePrice(p, s); // trade (تجاري) = آخر سعر شراء
+  const e = effPrices(p, s);
+  if (type === "premium") return e.premium;
+  if (type === "retail") return e.retail;
+  return e.trade; // trade (تجاري) = آخر سعر شراء — أو السعر التجاري الصريح من اللستة
 }
 function withPrices(p, s) {
-  const trade = tradePrice(p, s), premium = premiumPrice(p, s), retail = retailPrice(p, s);
+  const e = effPrices(p, s);
   return {
     ...p,
-    tradePrice: trade, premiumPrice: premium, retailPrice: retail,
-    margin: round2(retail - p.last_purchase_price),
-    marginPct: p.last_purchase_price ? round2(((retail - p.last_purchase_price) / p.last_purchase_price) * 100) : 0,
+    tradePrice: e.trade, premiumPrice: e.premium, retailPrice: e.retail,
+    margin: round2(e.retail - p.last_purchase_price),
+    marginPct: p.last_purchase_price ? round2(((e.retail - p.last_purchase_price) / p.last_purchase_price) * 100) : 0,
   };
 }
 function stockOf(productId, warehouseId) {
@@ -448,6 +483,56 @@ app.post("/api/products", auth, requireRole("super", "admin"), (req, res) => {
     res.json({ ok: true, id: r.lastInsertRowid });
   } catch (e) { res.status(400).json({ ok: false, error: "الباركود مستخدم من قبل" }); }
 });
+// استيراد جماعي من لستة المعرض (ملف الإكسل): upsert برقم الصنف — إعادة التشغيل لا تكرر
+app.post("/api/products/import", auth, requireRole("super", "admin"), (req, res) => {
+  const { items } = req.body || {};
+  if (!Array.isArray(items) || !items.length) return res.status(400).json({ ok: false, error: "لا توجد أصناف للاستيراد" });
+  let brand = db.prepare("SELECT * FROM brands WHERE name=?").get("أصناف الرضوان (لستة المعرض)");
+  if (!brand) {
+    const r = db.prepare("INSERT INTO brands (name) VALUES (?)").run("أصناف الرضوان (لستة المعرض)");
+    brand = { id: r.lastInsertRowid };
+  }
+  const roxy = db.prepare("SELECT * FROM brands WHERE name LIKE '%روكسي%'").get();
+  const gad = db.prepare("SELECT * FROM brands WHERE name LIKE '%جاد%'").get();
+  const mainWh = db.prepare("SELECT * FROM warehouses WHERE name='المخزن الرئيسي'").get() || { id: 2 };
+  let added = 0, updated = 0;
+  const skipped = [];
+  const findByNum = db.prepare("SELECT * FROM products WHERE item_number=?");
+  const ins = db.prepare(`INSERT INTO products
+    (name,size,unit,section,brand_id,barcode,item_number,list_price,last_purchase_price,explicit_trade,explicit_premium,explicit_retail)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
+  const upd = db.prepare(`UPDATE products SET name=?,unit=?,section=?,brand_id=?,list_price=?,last_purchase_price=?,explicit_trade=?,explicit_premium=?,explicit_retail=? WHERE id=?`);
+  for (const raw of items) {
+    const name = String(raw.name || "").trim();
+    const num = String(raw.number || "").trim();
+    if (!name || !num) { skipped.push({ number: num, name, reason: "اسم أو رقم صنف ناقص" }); continue; }
+    const numOrNull = (v) => (v != null && v !== "" && isFinite(+v) ? round2(+v) : null);
+    const purchase = numOrNull(raw.purchase) ?? 0;
+    const premium = numOrNull(raw.premium);
+    const trade = numOrNull(raw.trade);
+    const retail = numOrNull(raw.retail);
+    const listPrice = retail ?? trade ?? premium ?? purchase;
+    const stock = raw.stock != null && isFinite(+raw.stock) ? round2(+raw.stock) : 0;
+    const brandId = /روكسى|روكسي/.test(name) ? (roxy ? roxy.id : brand.id)
+      : /جاد/.test(name) ? (gad ? gad.id : brand.id) : brand.id;
+    const barcode = "RAD-" + num;
+    try {
+      const ex = findByNum.get(num);
+      if (ex) {
+        upd.run(name, String(raw.unit || "قطعة"), "other", brandId, listPrice, purchase, trade, premium, retail, ex.id);
+        setStock(ex.id, mainWh.id, stock);
+        updated++;
+      } else {
+        const r = ins.run(name, "", String(raw.unit || "قطعة"), "other", brandId, barcode, num, listPrice, purchase, trade, premium, retail);
+        setStock(r.lastInsertRowid, mainWh.id, stock);
+        added++;
+      }
+    } catch (e) {
+      skipped.push({ number: num, name, reason: /UNIQUE/.test(String(e.message)) ? "باركود/رقم مكرر" : String(e.message) });
+    }
+  }
+  res.json({ ok: true, added, updated, skipped });
+});
 app.put("/api/products/:id", auth, requireRole("super", "admin"), (req, res) => {
   const p = db.prepare("SELECT * FROM products WHERE id=?").get(req.params.id);
   if (!p) return res.status(404).json({ ok: false, error: "المنتج غير موجود" });
@@ -458,11 +543,17 @@ app.put("/api/products/:id", auth, requireRole("super", "admin"), (req, res) => 
     barcode: b.barcode ?? p.barcode,
     list_price: b.list_price != null ? Number(b.list_price) : p.list_price,
     last_purchase_price: b.last_purchase_price != null ? Number(b.last_purchase_price) : p.last_purchase_price,
+    explicit_trade: b.explicit_trade != null ? Number(b.explicit_trade) : p.explicit_trade,
+    explicit_premium: b.explicit_premium != null ? Number(b.explicit_premium) : p.explicit_premium,
+    explicit_retail: b.explicit_retail != null ? Number(b.explicit_retail) : p.explicit_retail,
   };
   logPrice(p.id, "list_price", p.list_price, next.list_price, req.user.id);
   logPrice(p.id, "last_purchase_price", p.last_purchase_price, next.last_purchase_price, req.user.id);
-  db.prepare(`UPDATE products SET name=?,size=?,unit=?,section=?,brand_id=?,barcode=?,list_price=?,last_purchase_price=? WHERE id=?`)
-    .run(next.name, next.size, next.unit, next.section, next.brand_id, next.barcode, next.list_price, next.last_purchase_price, p.id);
+  logPrice(p.id, "explicit_trade", p.explicit_trade || 0, next.explicit_trade || 0, req.user.id);
+  logPrice(p.id, "explicit_premium", p.explicit_premium || 0, next.explicit_premium || 0, req.user.id);
+  logPrice(p.id, "explicit_retail", p.explicit_retail || 0, next.explicit_retail || 0, req.user.id);
+  db.prepare(`UPDATE products SET name=?,size=?,unit=?,section=?,brand_id=?,barcode=?,list_price=?,last_purchase_price=?,explicit_trade=?,explicit_premium=?,explicit_retail=? WHERE id=?`)
+    .run(next.name, next.size, next.unit, next.section, next.brand_id, next.barcode, next.list_price, next.last_purchase_price, next.explicit_trade, next.explicit_premium, next.explicit_retail, p.id);
   res.json({ ok: true });
 });
 app.delete("/api/products/:id", auth, requireRole("super", "admin"), (req, res) => {
@@ -480,10 +571,20 @@ app.get("/api/price-log", auth, (req, res) => {
 // API: parties (customers / suppliers / plumbers) + bulk import
 // ---------------------------------------------------------------------------
 app.get("/api/parties", auth, (req, res) => {
-  const { type } = req.query;
+  const { type, q } = req.query;
   let rows = db.prepare("SELECT * FROM parties ORDER BY name").all();
   if (type) rows = rows.filter(p => p.type === type);
+  if (q) {
+    const needle = String(q).trim();
+    rows = rows.filter(p => ((p.name || "") + " " + (p.phone || "") + " " + (p.address || "") + " " + (p.external_number || "")).includes(needle));
+  }
   res.json({ ok: true, parties: rows });
+});
+app.get("/api/parties/:id", auth, (req, res) => {
+  const p = db.prepare("SELECT * FROM parties WHERE id=?").get(req.params.id);
+  if (!p) return res.status(404).json({ ok: false, error: "غير موجود" });
+  const fields = db.prepare("SELECT * FROM party_fields WHERE party_id=? ORDER BY id").all(p.id);
+  res.json({ ok: true, party: p, fields });
 });
 app.post("/api/parties", auth, (req, res) => {
   const { name, type, phone, address } = req.body || {};
@@ -496,8 +597,42 @@ app.put("/api/parties/:id", auth, (req, res) => {
   const b = req.body || {};
   const p = db.prepare("SELECT * FROM parties WHERE id=?").get(req.params.id);
   if (!p) return res.status(404).json({ ok: false, error: "غير موجود" });
-  db.prepare("UPDATE parties SET name=?, type=?, phone=?, address=? WHERE id=?")
-    .run(b.name ?? p.name, b.type ?? p.type, b.phone ?? p.phone, b.address ?? p.address, p.id);
+  const next = {
+    name: b.name ?? p.name, type: b.type ?? p.type, phone: b.phone ?? p.phone,
+    phone2: b.phone2 ?? p.phone2, address: b.address ?? p.address,
+    category: b.category ?? p.category, city: b.city ?? p.city, notes: b.notes ?? p.notes,
+  };
+  db.prepare("UPDATE parties SET name=?, type=?, phone=?, phone2=?, address=?, category=?, city=?, notes=? WHERE id=?")
+    .run(next.name, next.type, next.phone, next.phone2, next.address, next.category, next.city, next.notes, p.id);
+  // تعديل المبلغ يدوياً: يُسجَّل كقيد تعديل حتى يبقى سجل المديونية سليماً
+  if (b.balance != null && isFinite(+b.balance) && round2(+b.balance) !== round2(p.balance)) {
+    const delta = round2(+b.balance - p.balance);
+    db.prepare("UPDATE parties SET balance=?, last_activity=datetime('now') WHERE id=?").run(round2(+b.balance), p.id);
+    db.prepare("INSERT INTO debt_entries (party_id, kind, amount, note, created_by) VALUES (?, 'adjust', ?, ?, ?)")
+      .run(p.id, delta, "تعديل رصيد يدوي", req.user.id);
+  }
+  res.json({ ok: true });
+});
+// خانات إضافية مخصصة لكل طرف (إضافة/تعديل/حذف)
+app.post("/api/parties/:id/fields", auth, (req, res) => {
+  const { name, value } = req.body || {};
+  const p = db.prepare("SELECT * FROM parties WHERE id=?").get(req.params.id);
+  if (!p) return res.status(404).json({ ok: false, error: "غير موجود" });
+  if (!String(name || "").trim()) return res.status(400).json({ ok: false, error: "اكتب اسم الخانة" });
+  const r = db.prepare("INSERT INTO party_fields (party_id, field_name, field_value) VALUES (?,?,?)")
+    .run(p.id, String(name).trim(), String(value ?? ""));
+  res.json({ ok: true, id: r.lastInsertRowid });
+});
+app.put("/api/party-fields/:id", auth, (req, res) => {
+  const b = req.body || {};
+  const f = db.prepare("SELECT * FROM party_fields WHERE id=?").get(req.params.id);
+  if (!f) return res.status(404).json({ ok: false, error: "غير موجودة" });
+  db.prepare("UPDATE party_fields SET field_name=?, field_value=? WHERE id=?")
+    .run(b.name ?? f.field_name, b.value ?? f.field_value, f.id);
+  res.json({ ok: true });
+});
+app.delete("/api/party-fields/:id", auth, (req, res) => {
+  db.prepare("DELETE FROM party_fields WHERE id=?").run(req.params.id);
   res.json({ ok: true });
 });
 app.delete("/api/parties/:id", auth, (req, res) => {
@@ -507,6 +642,45 @@ app.delete("/api/parties/:id", auth, (req, res) => {
   db.prepare("DELETE FROM parties WHERE id=?").run(p.id);
   res.json({ ok: true });
 });
+// استيراد جماعي للعملاء/المديونية من كشف الإكسل: upsert بالرقم الخارجي — إعادة التشغيل لا تكرر
+app.post("/api/parties/import-customers", auth, requireRole("super", "admin"), (req, res) => {
+  const { customers } = req.body || {};
+  if (!Array.isArray(customers) || !customers.length) return res.status(400).json({ ok: false, error: "لا يوجد عملاء للاستيراد" });
+  let added = 0, updated = 0;
+  const skipped = [];
+  const findByNum = db.prepare("SELECT * FROM parties WHERE external_number=? AND external_number != ''");
+  const ins = db.prepare(`INSERT INTO parties (name,type,phone,phone2,address,category,city,external_number,notes,balance)
+    VALUES (?,?,?,?,?,?,?,?,?,?)`);
+  const upd = db.prepare(`UPDATE parties SET name=?, phone=?, phone2=?, address=?, category=?, city=?, notes=? WHERE id=?`);
+  for (const raw of customers) {
+    const name = String(raw.name || "").trim();
+    const num = String(raw.number || "").trim();
+    if (!name) { skipped.push({ number: num, name, reason: "اسم العميل ناقص" }); continue; }
+    const balance = raw.balance != null && isFinite(+raw.balance) ? round2(+raw.balance) : 0;
+    try {
+      const ex = num ? findByNum.get(num) : null;
+      if (ex) {
+        // تحديث بيانات التواصل فقط — الرصيد رصيد حي (فواتير وتحصيلات) ولا يُصفَّر بإعادة الاستيراد؛
+        // تصحيح الرصيد يكون من بطاقة إدارة الطرف ويُسجَّل كقيد تعديل
+        upd.run(name, String(raw.phone || ""), String(raw.phone2 || ""), String(raw.address || ""),
+          String(raw.category || ""), String(raw.city || ""), String(raw.notes || ""), ex.id);
+        updated++;
+      } else {
+        const r = ins.run(name, "customer", String(raw.phone || ""), String(raw.phone2 || ""),
+          String(raw.address || ""), String(raw.category || ""), String(raw.city || ""), num,
+          String(raw.notes || ""), balance);
+        if (balance !== 0)
+          db.prepare("INSERT INTO debt_entries (party_id, kind, amount, note, created_by) VALUES (?, 'import', ?, ?, ?)")
+            .run(r.lastInsertRowid, balance, "رصيد افتتاحي — كشف 18-11-2026", req.user.id);
+        added++;
+      }
+    } catch (e) {
+      skipped.push({ number: num, name, reason: String(e.message) });
+    }
+  }
+  res.json({ ok: true, added, updated, skipped });
+});
+
 // استيراد جماعي: سطور "الاسم، التليفون، العنوان" أو "الاسم - التليفون"
 app.post("/api/parties/import", auth, (req, res) => {
   const { type, lines } = req.body || {};
@@ -533,8 +707,13 @@ function invoiceText(inv, items, customer) {
 function fmt2(n) { return Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 2 }); }
 
 app.get("/api/invoices", auth, (req, res) => {
-  const rows = db.prepare(`SELECT i.*, p.name customer_name FROM invoices i
+  const { q } = req.query;
+  let rows = db.prepare(`SELECT i.*, p.name customer_name FROM invoices i
     LEFT JOIN parties p ON p.id=i.customer_id ORDER BY i.id DESC LIMIT 200`).all();
+  if (q) {
+    const needle = String(q).trim();
+    rows = rows.filter(i => ((i.customer_name || "") + " #" + i.id + " " + i.total).includes(needle));
+  }
   res.json({ ok: true, invoices: rows });
 });
 app.get("/api/invoices/:id", auth, (req, res) => {
@@ -643,8 +822,13 @@ app.post("/api/invoices", auth, (req, res) => {
 // API: purchases
 // ---------------------------------------------------------------------------
 app.get("/api/purchases", auth, (req, res) => {
-  const rows = db.prepare(`SELECT pu.*, p.name supplier_name FROM purchases pu
+  const { q } = req.query;
+  let rows = db.prepare(`SELECT pu.*, p.name supplier_name FROM purchases pu
     LEFT JOIN parties p ON p.id=pu.supplier_id ORDER BY pu.id DESC LIMIT 200`).all();
+  if (q) {
+    const needle = String(q).trim();
+    rows = rows.filter(p => ((p.supplier_name || "") + " #" + p.id + " " + p.total).includes(needle));
+  }
   res.json({ ok: true, purchases: rows });
 });
 app.post("/api/purchases", auth, (req, res) => {
@@ -691,9 +875,14 @@ app.post("/api/purchases", auth, (req, res) => {
 // API: debts
 // ---------------------------------------------------------------------------
 app.get("/api/debts", auth, (req, res) => {
-  const rows = db.prepare(`SELECT d.*, p.name party_name, p.type party_type, u.name created_by_name
+  const { q } = req.query;
+  let rows = db.prepare(`SELECT d.*, p.name party_name, p.type party_type, u.name created_by_name
     FROM debt_entries d LEFT JOIN parties p ON p.id=d.party_id LEFT JOIN users u ON u.id=d.created_by
     ORDER BY d.id DESC LIMIT 300`).all();
+  if (q) {
+    const needle = String(q).trim();
+    rows = rows.filter(d => ((d.party_name || "") + " " + (d.note || "") + " " + d.amount).includes(needle));
+  }
   res.json({ ok: true, debts: rows });
 });
 app.get("/api/debts/summary", auth, (req, res) => {
@@ -915,7 +1104,7 @@ app.get("/api/reports/daily-cash", auth, (req, res) => {
 // ---------------------------------------------------------------------------
 // Health + SPA fallback
 // ---------------------------------------------------------------------------
-app.get("/api/health", (req, res) => res.json({ ok: true, app: "al-radwan", version: "1.0.0" }));
+app.get("/api/health", (req, res) => res.json({ ok: true, app: "al-radwan", version: "1.1.0" }));
 app.get("*", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
 app.listen(PORT, HOST, () => {

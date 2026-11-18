@@ -3,8 +3,8 @@
 // ملاحظة مهمة: عند أي تحديث لملفات التطبيق (app.js أو غيره) ارفع رقم النسخة هنا،
 // حتى يتحدّث التطبيق المثبّت عند المستخدمين — الكاش القديم لا يتحدّث من نفسه.
 // (نفس الدرس من جاد ثيرم: الكاش الثابت باسم قديم يخفي التحديثات عن الموبايل)
-const CACHE = 'radwan-v2';
-const CORE = ['/', '/index.html', '/style.css', '/app.js', '/manifest.json', '/icon-192.png', '/icon-512.png', '/icon.svg'];
+const CACHE = 'radwan-v3';
+const CORE = ['/', '/index.html', '/style.css', '/app.js', '/manifest.json', '/icon-192.png', '/icon-512.png', '/icon.svg', '/brand-banner.jpg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).then(() => self.skipWaiting()));
