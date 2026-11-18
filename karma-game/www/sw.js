@@ -1,5 +1,5 @@
 /* Service worker for 'عالم كارما الجميلة وأخواتها' — offline-first. */
-var CACHE = 'karma-game-v3';
+var CACHE = 'karma-game-v4';
 var CORE = [
   './',
   'index.html',
