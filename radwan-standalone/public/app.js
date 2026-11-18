@@ -1,6 +1,7 @@
 /* معرض الرضوان — واجهة التطبيق */
 const LOGO_SVG = `<svg width="46" height="46" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
 <rect width="100" height="100" rx="18" fill="#0E6B34"/>
+<rect x="2.5" y="2.5" width="95" height="95" rx="16" fill="none" stroke="#D9A441" stroke-width="3"/>
 <rect x="18" y="30" width="64" height="14" rx="4" fill="#fff"/>
 <circle cx="34" cy="62" r="12" fill="none" stroke="#fff" stroke-width="7"/>
 <circle cx="70" cy="62" r="12" fill="none" stroke="#fff" stroke-width="7"/>
