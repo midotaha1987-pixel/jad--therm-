@@ -735,6 +735,14 @@ app.post("/api/khaled-ledger", auth, khaledOnly, (req, res) => {
     .run(kind, Number(amount), from_party || "", to_party || "", note || "", req.user.id);
   res.json({ ok: true, id: r.lastInsertRowid });
 });
+app.delete("/api/khaled-ledger/:id", auth, khaledOnly, (req, res) => {
+  const e = db.prepare("SELECT * FROM khaled_ledger WHERE id=?").get(req.params.id);
+  if (!e) return res.status(404).json({ ok: false, error: "القيد غير موجود" });
+  db.prepare("DELETE FROM khaled_ledger WHERE id=?").run(e.id);
+  // سجل تدقيق بسيط في سجلات السيرفر (لا يوجد جدول سجلات عام في التطبيق)
+  console.log(`[khaled-ledger delete] id=${e.id} kind=${e.kind} amount=${e.amount} from=${e.from_party} to=${e.to_party} note=${e.note} created_at=${e.created_at} deleted_by=${req.user.username} (${req.user.name}) at ${new Date().toISOString()}`);
+  res.json({ ok: true });
+});
 
 // ---------------------------------------------------------------------------
 // API: vault (خزنة الطوارئ) + expenses (المصاريف)

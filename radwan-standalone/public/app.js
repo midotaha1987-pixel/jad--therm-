@@ -454,7 +454,19 @@ async function vKhaled() {
     <button class="btn gold" onclick="voiceKhaled()">🎤 إدخال صوتي</button></div>
     <div id="khMsg" class="mt"></div>
   </div>
-  ${j.entries.map(e => `<div class="card"><div class="price-line"><span>${e.kind === "in" ? "⬇️ أخد" : "⬆️ رجّع"} — من ${esc(e.from_party || "—")} إلى ${esc(e.to_party || "—")}</span><b>${fmt(e.amount)} ج</b></div><div class="muted">${esc(e.note || "")} • ${esc((e.created_at || "").slice(0, 16))} • ${esc(e.created_by_name || "")}</div></div>`).join("") || `<p class="muted">الدفتر فارغ.</p>`}`;
+  ${j.entries.map(e => `<div class="card"><div class="price-line"><span>${e.kind === "in" ? "⬇️ أخد" : "⬆️ رجّع"} — من ${esc(e.from_party || "—")} إلى ${esc(e.to_party || "—")}</span><b>${fmt(e.amount)} ج</b></div><div class="muted">${esc(e.note || "")} • ${esc((e.created_at || "").slice(0, 16))} • ${esc(e.created_by_name || "")}</div>${canKhaled() ? `<div class="mt"><button class="btn danger small" onclick="delKhaled(${e.id})">🗑️ حذف القيد</button></div>` : ""}</div>`).join("") || `<p class="muted">الدفتر فارغ.</p>`}`;
+}
+async function delKhaled(id) {
+  if (!canKhaled()) return;
+  try {
+    const j = await api("GET", "/api/khaled-ledger");
+    const e = j.entries.find(x => x.id === Number(id));
+    if (!e) { alert("القيد غير موجود"); return; }
+    const label = `${e.kind === "in" ? "أخد" : "رجّع"} — ${fmt(e.amount)} ج — من ${e.from_party || "—"} إلى ${e.to_party || "—"} — ${(e.created_at || "").slice(0, 16)}`;
+    if (!confirm(`🗑️ حذف هذا القيد من دفتر الشيخ خالد؟\n${label}\nلا يمكن التراجع عن الحذف.`)) return;
+    await api("DELETE", "/api/khaled-ledger/" + id);
+    showTab("khaled");
+  } catch (err) { alert(err.message); }
 }
 async function addKhaled() {
   const msg = $("#khMsg");
