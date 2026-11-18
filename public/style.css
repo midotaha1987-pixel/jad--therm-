@@ -129,3 +129,12 @@ footer{max-width:960px;margin:0 auto;padding:12px 12px 100px;text-align:center;c
   nav.tabs button{font-size:11px;min-width:56px}
   .coupon code{font-size:18px}
 }
+
+/* كتالوج الهدايا */
+.gift-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:12px}
+.gift-card{background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:16px;text-align:center}
+.gift-icon{color:var(--navy);margin-bottom:6px}
+.gift-icon svg{width:52px;height:52px}
+.gift-points{font-size:20px;font-weight:800;color:var(--flame);margin:4px 0}
+.progress{height:10px;background:var(--line);border-radius:6px;overflow:hidden;margin:10px 0 6px}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--flame),var(--orange));border-radius:6px}

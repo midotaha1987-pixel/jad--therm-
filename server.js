@@ -33,6 +33,18 @@ const LABOR = {
 const PERCENT_RULE = { discount: 0.18, rate: 0.05 }; // white/gasket: price x0.82 x0.05
 const INSULATED_FALLBACK = 1.10;                    // +10% when no list ratio
 const POINTS = { normal: 0.25, pipe: 0.015 };       // 25% / pipes 1.5%
+// كتالوج الهدايا — النقاط = الجنيه (1 نقطة = 1 ج)؛ النقاط تُجمع بنسبة 25% من
+// أجرة السباك (المواسير 1.5%)، فـ wage = points × 4. قيم ثابتة من فلاير «سباك جاد»
+// بعد تطبيق قاعدة النقاط الخاصة بالتطبيق (وليس أرقام النقاط المطبوعة على الفلاير).
+const GIFTS = [
+  { key: "scissors_small", name: "المقص البولي الصغير", points: 150, wage: 600, icon: "scissors" },
+  { key: "scissors_big", name: "المقص البولي الكبير", points: 400, wage: 1600, icon: "scissors" },
+  { key: "tool_bag", name: "شنطة العدة", points: 600, wage: 2400, icon: "bag" },
+  { key: "welder_medium", name: "ماكينة لحام متوسطة", points: 1200, wage: 4800, icon: "welder" },
+  { key: "welder_big", name: "ماكينة لحام كبيرة", points: 1900, wage: 7600, icon: "welder" },
+  { key: "hilti", name: "هيلتي", points: 6500, wage: 26000, icon: "drill" },
+  { key: "umrah", name: "رحلة العمرة", points: 37000, wage: 148000, icon: "mosque" },
+];
 // زيادة التأخير عند صرف الكوبون — متدرجة حسب المدة من الإصدار لحد الصرف (Rony 2026-11-17)
 // قيمة الكوبون: شهر +5%، 3 شهور +10%، 6 شهور +15%، 9 شهور +20%، 12 شهر +25% (حد أقصى)
 // النقاط: شهر +3%، 3 شهور +6%، 6 شهور +9%، 9 شهور +12%، 12 شهر +15% (حد أقصى)
@@ -121,6 +133,14 @@ CREATE TABLE IF NOT EXISTS coupon_requests (
   FOREIGN KEY(job_id) REFERENCES plumber_jobs(id),
   FOREIGN KEY(technician_id) REFERENCES users(id), FOREIGN KEY(requested_by) REFERENCES users(id),
   FOREIGN KEY(coupon_id) REFERENCES coupons(id), FOREIGN KEY(decided_by) REFERENCES users(id)
+);
+CREATE TABLE IF NOT EXISTS gift_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
+  gift_key TEXT NOT NULL, gift_name TEXT NOT NULL, points_cost REAL NOT NULL,
+  status TEXT DEFAULT 'pending', note TEXT DEFAULT '',
+  decided_by INTEGER, decided_at TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY(user_id) REFERENCES users(id), FOREIGN KEY(decided_by) REFERENCES users(id)
 );
 CREATE TABLE IF NOT EXISTS notifications (
   id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
@@ -809,6 +829,87 @@ app.post("/api/coupon-requests/:id/reject", auth, requireRole("admin"), (req, re
 });
 
 // ---------------------------------------------------------------------------
+// API: كتالوج الهدايا (هدايا بالنقاط — 1 نقطة = 1 ج، النقاط 25% من أجرة السباك)
+// النقاط لا تُخصم عند الطلب، بل عند اعتماد الأدمن فقط — والخصم يُعاد فحصه وقتها.
+// ---------------------------------------------------------------------------
+app.get("/api/gifts", auth, (req, res) => {
+  const u = req.user;
+  const me = db.prepare("SELECT points FROM users WHERE id=?").get(u.id);
+  const myRequests = db.prepare("SELECT * FROM gift_requests WHERE user_id=? ORDER BY id DESC LIMIT 50").all(u.id);
+  const out = { ok: true, gifts: GIFTS, myPoints: me ? Number(me.points || 0) : 0, myRequests };
+  if (u.role === "admin") {
+    out.allRequests = db.prepare(`SELECT g.*, u.name AS user_name, u.username AS user_username,
+      d.name AS decided_name FROM gift_requests g
+      LEFT JOIN users u ON u.id=g.user_id LEFT JOIN users d ON d.id=g.decided_by
+      ORDER BY g.id DESC LIMIT 100`).all();
+  }
+  res.json(out);
+});
+app.post("/api/gifts/request", auth, requireRole("technician"), (req, res) => {
+  const { giftKey } = req.body || {};
+  const gift = GIFTS.find(g => g.key === giftKey);
+  if (!gift) return res.status(400).json({ ok: false, error: "الهدية غير موجودة" });
+  const me = db.prepare("SELECT points FROM users WHERE id=?").get(req.user.id);
+  const have = Number(me.points || 0);
+  if (have < gift.points)
+    return res.status(400).json({ ok: false, error: `نقاطك غير كافية — تحتاج ${gift.points} نقطة ولديك ${have} نقطة` });
+  const dup = db.prepare("SELECT id FROM gift_requests WHERE user_id=? AND gift_key=? AND status='pending'")
+    .get(req.user.id, gift.key);
+  if (dup) return res.status(400).json({ ok: false, error: "لديك طلب معلق لنفس الهدية بالفعل" });
+  const r = db.prepare("INSERT INTO gift_requests (user_id,gift_key,gift_name,points_cost) VALUES (?,?,?,?)")
+    .run(req.user.id, gift.key, gift.name, gift.points);
+  logTx(req.user.id, "gift_request", gift.points,
+    `طلب هدية #${r.lastInsertRowid} — ${gift.name} مقابل ${gift.points} نقطة`, r.lastInsertRowid);
+  for (const a of db.prepare("SELECT id FROM users WHERE role='admin'").all())
+    notify(a.id, "طلب هدية جديد 🎁", `الفني ${req.user.name} طلب هدية «${gift.name}» مقابل ${gift.points} نقطة`, "gift", r.lastInsertRowid);
+  res.json({ ok: true, request: { id: r.lastInsertRowid, gift_key: gift.key, gift_name: gift.name, points_cost: gift.points, status: "pending" } });
+});
+app.post("/api/gifts/:id/approve", auth, requireRole("admin"), (req, res) => {
+  const rq = db.prepare("SELECT * FROM gift_requests WHERE id=?").get(req.params.id);
+  if (!rq) return res.status(404).json({ ok: false, error: "الطلب غير موجود" });
+  if (rq.status !== "pending") return res.status(400).json({ ok: false, error: "الطلب تم البت فيه بالفعل" });
+  const tech = db.prepare("SELECT * FROM users WHERE id=?").get(rq.user_id);
+  if (!tech) return res.status(400).json({ ok: false, error: "الفني غير موجود" });
+  const have = Number(tech.points || 0);
+  if (have < rq.points_cost)
+    return res.status(400).json({ ok: false, error: `نقاط الفني غير كافية — لديه ${have} نقطة والهدية تحتاج ${rq.points_cost} نقطة` });
+  db.exec("BEGIN");
+  try {
+    db.prepare("UPDATE users SET points = points - ? WHERE id=?").run(rq.points_cost, tech.id);
+    db.prepare("INSERT INTO points_ledger (user_id,points,reason,job_id) VALUES (?,?,?,?)")
+      .run(tech.id, -rq.points_cost, `استبدال هدية «${rq.gift_name}» (طلب #${rq.id})`, null);
+    db.prepare("UPDATE gift_requests SET status='approved', decided_by=?, decided_at=datetime('now') WHERE id=?")
+      .run(req.user.id, rq.id);
+    logTx(tech.id, "gift_redeem", -rq.points_cost,
+      `استبدال هدية «${rq.gift_name}» — خصم ${rq.points_cost} نقطة (طلب #${rq.id})`, rq.id);
+    logTx(req.user.id, "gift_approve", rq.points_cost,
+      `اعتماد طلب هدية #${rq.id} — «${rq.gift_name}» للفني ${tech.name} — خصم ${rq.points_cost} نقطة`, rq.id);
+    notify(tech.id, "تم اعتماد هديتك 🎁",
+      `الأدمن اعتمد طلب هدية «${rq.gift_name}» وتم خصم ${rq.points_cost} نقطة من رصيدك — مبروك!`, "gift", rq.id);
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); throw e; }
+  res.json({ ok: true });
+});
+app.post("/api/gifts/:id/reject", auth, requireRole("admin"), (req, res) => {
+  const rq = db.prepare("SELECT * FROM gift_requests WHERE id=?").get(req.params.id);
+  if (!rq) return res.status(404).json({ ok: false, error: "الطلب غير موجود" });
+  if (rq.status !== "pending") return res.status(400).json({ ok: false, error: "الطلب تم البت فيه بالفعل" });
+  const note = String((req.body || {}).note || "");
+  db.prepare("UPDATE gift_requests SET status='rejected', note=?, decided_by=?, decided_at=datetime('now') WHERE id=?")
+    .run(note, req.user.id, rq.id);
+  const tech = db.prepare("SELECT * FROM users WHERE id=?").get(rq.user_id);
+  logTx(req.user.id, "gift_reject", rq.points_cost,
+    `رفض طلب هدية #${rq.id} — «${rq.gift_name}» للفني ${tech ? tech.name : ""}${note ? " — " + note : ""}`, rq.id);
+  if (tech) {
+    logTx(tech.id, "gift_reject", 0,
+      `تم رفض طلب هدية #${rq.id} — «${rq.gift_name}»${note ? " — " + note : ""} — لم يتم خصم أي نقاط`, rq.id);
+    notify(tech.id, "تم رفض طلب الهدية",
+      `الأدمن رفض طلب هدية «${rq.gift_name}»${note ? " — " + note : ""} — لم يتم خصم أي نقاط`, "gift", rq.id);
+  }
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
 // API: notifications (الإشعارات)
 // ---------------------------------------------------------------------------
 app.get("/api/notifications", auth, (req, res) => {
@@ -1101,7 +1202,7 @@ app.post("/api/search", auth, (req, res) => {
 
 app.get("/api/backup", auth, requireRole("admin"), (req, res) => {
   const dump = {};
-  for (const t of ["users", "coupons", "transactions", "points_ledger", "plumber_jobs", "coupon_requests", "notifications", "merchants", "invoices", "route_weeks", "visits", "catalog", "attachments", "warranty_files", "inspections"]) {
+  for (const t of ["users", "coupons", "transactions", "points_ledger", "plumber_jobs", "coupon_requests", "gift_requests", "notifications", "merchants", "invoices", "route_weeks", "visits", "catalog", "attachments", "warranty_files", "inspections"]) {
     dump[t] = db.prepare(`SELECT * FROM ${t}`).all();
   }
   // strip password hashes from export
@@ -1114,7 +1215,7 @@ app.post("/api/backup", auth, requireRole("admin"), (req, res) => {
   // restore non-user tables only (users keep current passwords)
   db.exec("BEGIN");
   try {
-    for (const t of ["coupons", "transactions", "points_ledger", "plumber_jobs", "coupon_requests", "notifications", "merchants", "invoices", "route_weeks", "visits", "attachments", "warranty_files", "inspections"]) {
+    for (const t of ["coupons", "transactions", "points_ledger", "plumber_jobs", "coupon_requests", "gift_requests", "notifications", "merchants", "invoices", "route_weeks", "visits", "attachments", "warranty_files", "inspections"]) {
       if (Array.isArray(dump[t])) {
         db.prepare(`DELETE FROM ${t}`).run();
         for (const row of dump[t]) {

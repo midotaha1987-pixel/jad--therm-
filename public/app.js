@@ -99,16 +99,16 @@ function enter() {
 function buildTabs() {
   const all = {
     home: ["🏠", "الرئيسية"], coupons: ["🎟️", "الكوبونات"], requests: ["📩", "طلبات الكوبونات"], calc: ["🧮", "حساب السباك"],
-    offers: ["⭐", "عروضي ونقاطي"], prices: ["🏷️", "الأسعار"], route: ["🗺️", "خط السير"],
+    offers: ["⭐", "عروضي ونقاطي"], gifts: ["🎁", "كتالوج الهدايا"], prices: ["🏷️", "الأسعار"], route: ["🗺️", "خط السير"],
     invoices: ["🧾", "الفواتير"], merchants: ["🏪", "التجار"], users: ["👥", "المستخدمون"],
     reports: ["📊", "التقارير"], warranty: ["🛡️", "الضمان"], inspect: ["🏠", "معاينة الشقة"], account: ["👤", "حسابي"],
   };
   const byRole = {
-    admin: ["home", "coupons", "requests", "calc", "prices", "route", "invoices", "merchants", "reports", "warranty", "inspect", "users", "account"],
+    admin: ["home", "coupons", "requests", "gifts", "calc", "prices", "route", "invoices", "merchants", "reports", "warranty", "inspect", "users", "account"],
     distributor: ["home", "coupons", "prices", "warranty", "account"],
     merchant: ["home", "coupons", "prices", "invoices", "warranty", "account"],
-    technician: ["home", "coupons", "offers", "prices", "warranty", "inspect", "account"],
-    salesrep: ["home", "calc", "requests", "prices", "route", "invoices", "merchants", "warranty", "inspect", "account"],
+    technician: ["home", "coupons", "offers", "gifts", "prices", "warranty", "inspect", "account"],
+    salesrep: ["home", "calc", "requests", "gifts", "prices", "route", "invoices", "merchants", "warranty", "inspect", "account"],
   };
   const tabs = byRole[ME.role] || ["home", "account"];
   $("#tabs").innerHTML = tabs.map(t => `<button data-tab="${t}" onclick="showTab('${t}')"><span class="ic">${all[t][0]}</span>${all[t][1]}</button>`).join("");
@@ -124,6 +124,7 @@ async function showTab(t) {
     else if (t === "requests") m.innerHTML = await vRequests();
     else if (t === "calc") m.innerHTML = await vCalc();
     else if (t === "offers") m.innerHTML = await vOffers();
+    else if (t === "gifts") m.innerHTML = await vGifts();
     else if (t === "prices") m.innerHTML = await vPrices();
     else if (t === "route") m.innerHTML = await vRoute();
     else if (t === "invoices") m.innerHTML = await vInvoices();
@@ -501,6 +502,79 @@ async function vOffers() {
     <div class="row mt">${photoInputHTML("job", j.id)}</div>
     <div class="photos mt" data-entity="job:${j.id}"></div></div>`).join("") || `<p class="muted">لا توجد عروض بعد</p>`}
   </div>`;
+}
+
+// ---------------- كتالوج الهدايا (فني + أدمن + مندوب) ----------------
+// أيقونات مرسومة SVG — بدون صور أو علامات تجارية.
+function giftIcon(icon) {
+  const s = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">`;
+  const e = `</svg>`;
+  if (icon === "scissors") return s + `<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88"/><path d="M14.47 14.48 20 20"/><path d="M8.12 8.12 12 12"/>` + e;
+  if (icon === "bag") return s + `<path d="M5 8h14l-1.2 12.2a1.5 1.5 0 0 1-1.5 1.3H7.7a1.5 1.5 0 0 1-1.5-1.3L5 8z"/><path d="M8.5 10V6.5a3.5 3.5 0 0 1 7 0V10"/><path d="M9.5 13.5h5"/>` + e;
+  if (icon === "welder") return s + `<rect x="2.5" y="7" width="13" height="10" rx="2"/><circle cx="9" cy="12" r="2.6"/><path d="M12.2 12h.01"/><path d="M15.5 10.5H18l2.5 2.5v4.5"/><path d="M6 7V4.5h6V7"/>` + e;
+  if (icon === "drill") return s + `<path d="M3 8.5h8.5v5H9.5l-.8 4.5a1 1 0 0 1-1 .8h-.9a1 1 0 0 1-1-.8L6.6 13.5H3z"/><path d="M11.5 9.5H18l2.5 2-2.5 2h-6.5"/><path d="M20.5 11.5h.01"/>` + e;
+  // mosque — رحلة العمرة
+  return s + `<path d="M12 2.5c1.9 1.9 3.8 3.4 3.8 5.7H8.2c0-2.3 1.9-3.8 3.8-5.7z"/><path d="M12 2.5V1.8"/><path d="M3.5 21v-7.5h17V21"/><path d="M5.5 13.5V9.8M18.5 13.5V9.8"/><path d="M8.2 16.5h7.6"/>` + e;
+}
+const GIFT_STATUS_AR = { pending: "قيد الانتظار", approved: "تم الاعتماد ✅", rejected: "مرفوض" };
+async function vGifts() {
+  const d = await api("GET", "/api/gifts");
+  const isTech = ME.role === "technician";
+  const badge = (s) => `<span class="badge ${s === "approved" ? "green" : s === "rejected" ? "red" : "amber"}">${GIFT_STATUS_AR[s] || s}</span>`;
+  let h = `<div class="card"><h2>🎁 كتالوج الهدايا</h2>
+    <div class="stat"><b>${fmt(d.myPoints)}</b><span>رصيد نقاطك (النقطة = 1 ج)</span></div>
+    <div class="card mt" style="box-shadow:none"><h3>كيف تجمع النقاط؟</h3>
+      <p>من كل عرض سباك: <b>25% من أجرة السباك</b> تتحول لنقاط — والمواسير <b>1.5% فقط</b> من أجرتها.
+      وكل <b>نقطة = 1 جنيه</b> في الهدايا.</p>
+      <p class="muted">مثال: أجرة سباك 1,600 ج = 400 نقطة = المقص البولي الكبير 🎁 — والنقاط لا تُخصم إلا بعد اعتماد الأدمن لطلب الهدية.</p>
+    </div>
+    <div class="gift-grid">${d.gifts.map(g => {
+      const pct = Math.min(100, Math.round(d.myPoints / g.points * 100));
+      const can = isTech && d.myPoints >= g.points;
+      const pending = d.myRequests.some(r => r.gift_key === g.key && r.status === "pending");
+      return `<div class="gift-card">
+        <div class="gift-icon">${giftIcon(g.icon)}</div>
+        <b>${esc(g.name)}</b>
+        <div class="gift-points">${fmt(g.points)} نقطة</div>
+        <div class="muted">تحتاج أجرة سباك إجمالية ${fmt(g.wage)} ج لجمعها</div>
+        <div class="progress"><div class="progress-fill" style="width:${pct}%"></div></div>
+        <div class="muted">${fmt(d.myPoints)} / ${fmt(g.points)} نقطة — ${pct}%</div>
+        ${isTech
+          ? (pending ? `<button class="btn small mt" disabled>⏳ طلبك قيد الانتظار</button>`
+            : `<button class="btn mt ${can ? "green" : ""}" ${can ? "" : "disabled"} onclick="requestGift('${g.key}')">🎁 اطلب الهدية</button>`)
+          : `<div class="muted mt">الطلب متاح للفنيين</div>`}
+      </div>`;
+    }).join("")}</div></div>`;
+  h += `<div class="card"><h2>طلباتي</h2>${d.myRequests.length ? `<table><tr><th>الهدية</th><th>النقاط</th><th>الحالة</th><th>التاريخ</th></tr>${d.myRequests.map(r => `<tr><td>${esc(r.gift_name)}</td><td>${fmt(r.points_cost)} نقطة</td><td>${badge(r.status)}</td><td class="muted">${esc(r.created_at.slice(0, 16))}</td></tr>`).join("")}</table>` : `<p class="muted">لم تطلب أي هدية بعد</p>`}</div>`;
+  if (ME.role === "admin" && d.allRequests) {
+    h += `<div class="card"><h2>كل طلبات الهدايا (الأدمن)</h2>${d.allRequests.length ? `<table><tr><th>الفني</th><th>الهدية</th><th>النقاط</th><th>الحالة</th><th>التاريخ</th><th></th></tr>${d.allRequests.map(r => `<tr><td>${esc(r.user_name || r.user_username || "")}</td><td>${esc(r.gift_name)}</td><td>${fmt(r.points_cost)} نقطة</td><td>${badge(r.status)}${r.status !== "pending" && r.decided_name ? `<br><span class="muted">${esc(r.decided_name)}</span>` : ""}</td><td class="muted">${esc(r.created_at.slice(0, 16))}</td><td>${r.status === "pending" ? `<div class="row"><button class="btn small green" onclick="approveGift(${r.id})">اعتماد ✅</button><button class="btn small danger" onclick="rejectGift(${r.id})">رفض</button></div>` : ""}</td></tr>`).join("")}</table>` : `<p class="muted">لا توجد طلبات هدايا بعد</p>`}</div>`;
+  }
+  return h;
+}
+async function requestGift(key) {
+  if (!confirm("تأكيد طلب هذه الهدية؟ النقاط تُخصم فقط بعد اعتماد الأدمن للطلب.")) return;
+  try {
+    const r = await api("POST", "/api/gifts/request", { giftKey: key });
+    alert(`تم إرسال طلب الهدية #${r.request.id} للأدمن ✅`);
+    showTab("gifts");
+  } catch (e) { alert(e.message); }
+}
+async function approveGift(id) {
+  if (!confirm("اعتماد هذه الهدية وخصم النقاط من رصيد الفني؟")) return;
+  try {
+    await api("POST", `/api/gifts/${id}/approve`);
+    alert("تم الاعتماد وخصم النقاط من الفني ✅");
+    showTab("gifts");
+  } catch (e) { alert(e.message); }
+}
+async function rejectGift(id) {
+  const note = prompt("سبب الرفض (اختياري):");
+  if (note === null) return;
+  try {
+    await api("POST", `/api/gifts/${id}/reject`, { note });
+    alert("تم رفض الطلب — لم يتم خصم أي نقاط");
+    showTab("gifts");
+  } catch (e) { alert(e.message); }
 }
 
 // ---------------- الأسعار ----------------
