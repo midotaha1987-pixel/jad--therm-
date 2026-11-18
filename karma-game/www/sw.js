@@ -1,9 +1,10 @@
 /* Service worker for 'عالم كارما الجميلة وأخواتها' — offline-first. */
-var CACHE = 'karma-game-v4';
+var CACHE = 'karma-game-v5';
 var CORE = [
   './',
   'index.html',
   'sw.js',
+  'assets/three.min.js',
   'assets/guide-chest.mp3',
   'assets/guide-draw.mp3',
   'assets/guide-films.mp3',
