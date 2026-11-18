@@ -1,0 +1,5 @@
+# Godot — never commit the import cache.
+.godot/
+export/
+debug.keystore
+*.tmp

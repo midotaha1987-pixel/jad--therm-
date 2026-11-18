@@ -1,0 +1,132 @@
+# Build the Godot 3D runner game (مغامرات عمر وياسين 3D) as an Android APK.
+# Uses the prebuilt export template (no Gradle build) and a debug keystore
+# generated at runtime, so the APK is debug-signed for internal testing only.
+# A release keystore is still needed before Google Play publishing.
+name: Build Godot 3D Runner APK
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "godot-game/**"
+      - ".github/workflows/build-godot-apk.yml"
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-24.04
+    env:
+      GODOT_VERSION: 4.4.1
+      GODOT_BIN: /tmp/godot/Godot_v4.4.1-stable_linux.x86_64
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Download Godot 4.4.1 editor + export templates
+        run: |
+          mkdir -p /tmp/godot ~/.local/share/godot/export_templates/4.4.1.stable
+          cd /tmp/godot
+          curl -sSLo godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          curl -sSLo templates.tpz "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          unzip -q -o godot.zip
+          chmod +x "Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+          unzip -q -o templates.tpz
+          mv templates/* ~/.local/share/godot/export_templates/4.4.1.stable/
+          ls ~/.local/share/godot/export_templates/4.4.1.stable/android_debug.apk
+          "$GODOT_BIN" --version
+
+      # GitHub-hosted runners already ship the full Android SDK (root-owned at
+      # /usr/local/lib/android/sdk). Use the preinstalled one directly, and
+      # make sure the components Godot 4.4 needs are present.
+      - name: Ensure Android SDK components
+        run: |
+          ls "$ANDROID_HOME/build-tools"
+          ls "$ANDROID_HOME/platforms"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          NEED=""
+          [ -d "$ANDROID_HOME/platforms/android-34" ] || NEED="$NEED platforms;android-34"
+          [ -d "$ANDROID_HOME/build-tools/34.0.0" ] || NEED="$NEED build-tools;34.0.0"
+          if [ -n "$NEED" ]; then
+            echo "Installing missing SDK components:$NEED"
+            # shellcheck disable=SC2086
+            yes | "$SDKMANAGER" $NEED
+          else
+            echo "SDK components already present."
+          fi
+
+      # Godot reads the SDK/JDK paths from its editor settings, not from env
+      # vars, so write them there (generating the default file first).
+      - name: Point Godot editor settings at the SDK + JDK
+        run: |
+          "$GODOT_BIN" --headless --editor --quit || true
+          SETTINGS="$HOME/.config/godot/editor_settings-4.4.tres"
+          python3 - "$SETTINGS" <<'PYEOF'
+          import sys
+          path, sdk, jdk = sys.argv[1], "/usr/local/lib/android/sdk", __import__("os").environ["JAVA_HOME"]
+          lines = []
+          try:
+              with open(path) as f:
+                  lines = f.read().splitlines()
+          except FileNotFoundError:
+              lines = ['[gd_resource type="EditorSettings" format=3]', "", "[resource]"]
+          want = {
+              "export/android/android_sdk_path": f'"{sdk}"',
+              "export/android/java_sdk_path": f'"{jdk}"',
+          }
+          out = []
+          seen = set()
+          for line in lines:
+              key = line.split("=", 1)[0].strip()
+              if key in want:
+                  out.append(f"{key}={want[key]}")
+                  seen.add(key)
+              else:
+                  out.append(line)
+          for key, val in want.items():
+              if key not in seen:
+                  out.append(f"{key}={val}")
+          with open(path, "w") as f:
+              f.write("\n".join(out) + "\n")
+          print(open(path).read())
+          PYEOF
+
+      - name: Generate debug keystore
+        run: |
+          keytool -genkeypair -keystore godot-game/debug.keystore \
+            -storepass android -alias android -keypass android \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Import project
+        run: "$GODOT_BIN" --headless --path godot-game --import
+
+      - name: Export Android APK (debug)
+        run: |
+          mkdir -p godot-game/export
+          "$GODOT_BIN" --headless --path godot-game --export-debug Android godot-game/export/omar-yassin-3d.apk
+
+      - name: Verify APK
+        run: |
+          ls -lh godot-game/export/omar-yassin-3d.apk
+          SIZE=$(stat -c%s godot-game/export/omar-yassin-3d.apk)
+          echo "APK size: $SIZE bytes"
+          test "$SIZE" -gt 1000000
+          file godot-game/export/omar-yassin-3d.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: omar-yassin-3d-apk
+          path: godot-game/export/omar-yassin-3d.apk
+          if-no-files-found: error
