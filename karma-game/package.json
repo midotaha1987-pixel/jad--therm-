@@ -1,0 +1,14 @@
+{
+  "dependencies": {
+    "@capacitor/android": "^7.6.10",
+    "@capacitor/cli": "^7.6.10",
+    "@capacitor/core": "^7.6.10"
+  },
+  "description": "عالم كارما الجميلة وأخواتها — لعبة تفاعلية للبنات (رسم، حفظ قرآن جزء عم، قصص، وضوء وصلاة)",
+  "name": "karma-game",
+  "private": true,
+  "scripts": {
+    "sync": "npx cap sync android"
+  },
+  "version": "1.0.0"
+}

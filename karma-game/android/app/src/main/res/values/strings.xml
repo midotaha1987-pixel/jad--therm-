@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">عالم كارما الجميلة وأخواتها</string>
+    <string name="title_activity_main">عالم كارما الجميلة وأخواتها</string>
+    <string name="package_name">com.karma.game</string>
+    <string name="custom_url_scheme">com.karma.game</string>
+</resources>

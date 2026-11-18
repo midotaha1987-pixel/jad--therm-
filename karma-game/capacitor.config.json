@@ -1,0 +1,8 @@
+{
+  "android": {
+    "allowMixedContent": false
+  },
+  "appId": "com.karma.game",
+  "appName": "عالم كارما الجميلة وأخواتها",
+  "webDir": "www"
+}
