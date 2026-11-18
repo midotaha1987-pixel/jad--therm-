@@ -109,7 +109,8 @@ jobs:
             -dname "CN=Android Debug,O=Android,C=US"
 
       - name: Import project
-        run: "$GODOT_BIN" --headless --path godot-game --import
+        run: |
+          "$GODOT_BIN" --headless --path godot-game --import
 
       - name: Export Android APK (debug)
         run: |
