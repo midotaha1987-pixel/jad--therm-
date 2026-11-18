@@ -3814,5 +3814,16 @@
   "kind": "other",
   "laborKey": "none",
   "id": 341
+ },
+ {
+  "section": "gasket",
+  "name": "سيفون 110",
+  "size": "4",
+  "unit": "piece",
+  "price": 180.0,
+  "insulated": false,
+  "kind": "fitting",
+  "laborKey": "percent",
+  "id": 342
  }
 ]

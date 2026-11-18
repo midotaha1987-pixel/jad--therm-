@@ -494,6 +494,50 @@ app.get("/api/catalog", auth, (req, res) => {
   const rows = db.prepare(`SELECT * FROM catalog ${where} ORDER BY section, name, size LIMIT 300`).all(...params);
   res.json({ ok: true, items: rows, count: rows.length });
 });
+// إضافة/تعديل صنف في الكتالوج (أدمن فقط) — لتثبيت تصحيحات لستة الأسعار على
+// قاعدة البيانات الحية (الـ seed من catalog.json يعمل فقط على قاعدة فارغة).
+// يحدَّث الصنف بالـ id إن أُعطي، وإلا بالمفتاح الطبيعي (section,name,size,insulated).
+app.post("/api/catalog/upsert", auth, requireRole("admin"), (req, res) => {
+  const b = req.body || {};
+  const section = String(b.section || "").trim();
+  const name = String(b.name || "").trim();
+  const size = String(b.size ?? "").trim();
+  const price = Number(b.price);
+  if (!["ppr", "white", "gasket", "other"].includes(section))
+    return res.status(400).json({ ok: false, error: "قسم غير صحيح" });
+  if (!name) return res.status(400).json({ ok: false, error: "اسم الصنف مطلوب" });
+  if (!Number.isFinite(price) || price < 0)
+    return res.status(400).json({ ok: false, error: "سعر غير صحيح" });
+  const unit = String(b.unit || "piece").trim();
+  const kind = String(b.kind || "fitting").trim();
+  const laborKey = String(b.laborKey || b.labor_key || "percent").trim();
+  const insulated = b.insulated ? 1 : 0;
+  const greenPrice = (b.greenPrice ?? b.green_price ?? null);
+  let row = null;
+  if (b.id !== undefined && b.id !== null && b.id !== "") {
+    row = db.prepare("SELECT * FROM catalog WHERE id=?").get(Number(b.id));
+  }
+  if (!row) {
+    row = db.prepare("SELECT * FROM catalog WHERE section=? AND name=? AND size=? AND insulated=?")
+      .get(section, name, size, insulated);
+  }
+  if (row) {
+    db.prepare(`UPDATE catalog SET section=?,name=?,size=?,unit=?,price=?,insulated=?,kind=?,labor_key=?,green_price=? WHERE id=?`)
+      .run(section, name, size, unit, price, insulated, kind, laborKey, greenPrice, row.id);
+    console.log(`catalog upsert: updated id=${row.id} ${name} ${size} -> ${price} by ${req.user.username}`);
+    row = db.prepare("SELECT * FROM catalog WHERE id=?").get(row.id);
+    return res.json({ ok: true, updated: true, item: row });
+  }
+  const newId = (b.id !== undefined && b.id !== null && b.id !== "")
+    ? Number(b.id)
+    : (db.prepare("SELECT COALESCE(MAX(id),0) m FROM catalog").get().m + 1);
+  db.prepare(`INSERT INTO catalog (id,section,name,size,unit,price,insulated,kind,labor_key,green_price)
+    VALUES (?,?,?,?,?,?,?,?,?,?)`)
+    .run(newId, section, name, size, unit, price, insulated, kind, laborKey, greenPrice);
+  console.log(`catalog upsert: inserted id=${newId} ${name} ${size} = ${price} by ${req.user.username}`);
+  row = db.prepare("SELECT * FROM catalog WHERE id=?").get(newId);
+  res.json({ ok: true, updated: false, item: row });
+});
 app.get("/api/company", (req, res) => res.json({ ok: true, company: COMPANY, certificates: CERTIFICATES }));
 
 // ---------------------------------------------------------------------------
@@ -849,6 +893,20 @@ function parseInvoiceLines(text) {
     if (isPipe) {
       const pipes = cands.filter(c => c.kind === "pipe");
       if (pipes.length) cands = pipes;
+    }
+    // إذا كان اسم صنف كامل مذكورًا في السطر (مثل "سيفون 110")، فضّل أطول اسم
+    // مطابق — وإلا كان "سيفون 110" سيطابق "سيفون" الأبيض بالخطأ.
+    const lineNorm = line.replace(/\s+/g, "");
+    let bestLen = 0;
+    for (const c of cands) {
+      const n = String(c.name).replace(/\s+/g, "");
+      if (n && lineNorm.includes(n)) bestLen = Math.max(bestLen, n.length);
+    }
+    if (bestLen > 0) {
+      cands = cands.filter(c => {
+        const n = String(c.name).replace(/\s+/g, "");
+        return n.length === bestLen && lineNorm.includes(n);
+      });
     }
     // preference when system not specified: white, then gasket, then ppr
     if (!section) {
