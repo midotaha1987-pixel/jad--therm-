@@ -1,5 +1,5 @@
 /* Service worker for 'عالم كارما الجميلة وأخواتها' — offline-first. */
-var CACHE = 'karma-game-v1';
+var CACHE = 'karma-game-v2';
 var CORE = [
   './',
   'index.html',
@@ -74,7 +74,13 @@ var CORE = [
   'assets/wudu-5.mp3',
   'assets/wudu-6.mp3',
   'assets/wudu-7.mp3',
-  'assets/wudu-8.mp3'
+  'assets/wudu-8.mp3',
+  'assets/film1-chase.mp4',
+  'assets/film1-cheese.mp4',
+  'assets/film1-friends.mp4',
+  'assets/film2-garden.mp4',
+  'assets/film2-forest.mp4',
+  'assets/film2-night.mp4'
 ];
 self.addEventListener('install', function(e) {
   e.waitUntil(caches.open(CACHE).then(function(c) { return c.addAll(CORE); }).then(function() { return self.skipWaiting(); }));
