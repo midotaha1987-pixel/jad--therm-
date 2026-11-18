@@ -454,7 +454,19 @@ async function vKhaled() {
     <button class="btn gold" onclick="voiceKhaled()">🎤 إدخال صوتي</button></div>
     <div id="khMsg" class="mt"></div>
   </div>
-  ${j.entries.map(e => `<div class="card"><div class="price-line"><span>${e.kind === "in" ? "⬇️ أخد" : "⬆️ رجّع"} — من ${esc(e.from_party || "—")} إلى ${esc(e.to_party || "—")}</span><b>${fmt(e.amount)} ج</b></div><div class="muted">${esc(e.note || "")} • ${esc((e.created_at || "").slice(0, 16))} • ${esc(e.created_by_name || "")}</div></div>`).join("") || `<p class="muted">الدفتر فارغ.</p>`}`;
+  ${j.entries.map(e => `<div class="card"><div class="price-line"><span>${e.kind === "in" ? "⬇️ أخد" : "⬆️ رجّع"} — من ${esc(e.from_party || "—")} إلى ${esc(e.to_party || "—")}</span><b>${fmt(e.amount)} ج</b></div><div class="muted">${esc(e.note || "")} • ${esc((e.created_at || "").slice(0, 16))} • ${esc(e.created_by_name || "")}</div>${canKhaled() ? `<div class="mt"><button class="btn danger small" onclick="delKhaled(${e.id})">🗑️ حذف القيد</button></div>` : ""}</div>`).join("") || `<p class="muted">الدفتر فارغ.</p>`}`;
+}
+async function delKhaled(id) {
+  if (!canKhaled()) return;
+  try {
+    const j = await api("GET", "/api/khaled-ledger");
+    const e = j.entries.find(x => x.id === Number(id));
+    if (!e) { alert("القيد غير موجود"); return; }
+    const label = `${e.kind === "in" ? "أخد" : "رجّع"} — ${fmt(e.amount)} ج — من ${e.from_party || "—"} إلى ${e.to_party || "—"} — ${(e.created_at || "").slice(0, 16)}`;
+    if (!confirm(`🗑️ حذف هذا القيد من دفتر الشيخ خالد؟\n${label}\nلا يمكن التراجع عن الحذف.`)) return;
+    await api("DELETE", "/api/khaled-ledger/" + id);
+    showTab("khaled");
+  } catch (err) { alert(err.message); }
 }
 async function addKhaled() {
   const msg = $("#khMsg");
@@ -694,18 +706,56 @@ async function changePw() {
 let voiceCtx = null; // 'khaled' | 'expense' | null
 function openVoice(ctx) { voiceCtx = ctx || null; $("#voiceModal").classList.remove("hidden"); }
 function closeVoice() { $("#voiceModal").classList.add("hidden"); }
-function startListening() {
+async function startListening() {
+  const statusEl = $("#micStatus");
+  const setStatus = (t) => { statusEl.textContent = t; };
+  // 1) داخل تطبيق الأندرويد (APK): البلجن الأصلي للتعرف الصوتي،
+  // لأن WebView لا يدعم Web Speech API أصلاً — الكود القديم كان يفشل هنا دائماً.
+  const cap = window.Capacitor;
+  if (cap && typeof cap.isNativePlatform === "function" && cap.isNativePlatform()) {
+    try {
+      setStatus("🎤 أستمع... تكلم الآن");
+      const av = await cap.nativePromise("SpeechRecognition", "available", {});
+      if (!av || av.available === false) {
+        setStatus("التعرف الصوتي غير متاح على هذا الجهاز — اكتب الأمر يدوياً.");
+        return;
+      }
+      let perm = await cap.nativePromise("SpeechRecognition", "checkPermissions", {});
+      if (!perm || perm.speechRecognition !== "granted") {
+        perm = await cap.nativePromise("SpeechRecognition", "requestPermissions", {});
+      }
+      if (!perm || perm.speechRecognition !== "granted") {
+        setStatus("لازم تسمح للميكروفون عشان البحث الصوتي يشتغل — فعّله من إعدادات الموبايل ← التطبيقات ← معرض الرضوان ← الأذونات ← الميكروفون.");
+        return;
+      }
+      const res = await cap.nativePromise("SpeechRecognition", "start", { language: "ar-EG", maxResults: 1, prompt: "تكلم الآن", popup: true, partialResults: false });
+      const text = res && res.matches && res.matches[0];
+      if (text) {
+        $("#voiceText").value = text;
+        setStatus("تم الاستماع — راجع الأمر ثم اضغط «بحث / تنفيذ».");
+      } else {
+        setStatus("لم أسمع شيئاً — حاول مرة أخرى.");
+      }
+    } catch (e) {
+      const msg = String((e && (e.message || e)) || "");
+      if (msg === "0" || /cancel/i.test(msg)) setStatus("تم إلغاء الاستماع — دوس «🎤 تكلم» وحاول مرة أخرى.");
+      else if (/MISSING_PERMISSION|permission/i.test(msg)) setStatus("لازم تسمح للميكروفون عشان البحث الصوتي يشتغل — فعّله من إعدادات الموبايل ← التطبيقات ← معرض الرضوان ← الأذونات ← الميكروفون.");
+      else setStatus("تعذر الاستماع — اكتب الأمر يدوياً.");
+    }
+    return;
+  }
+  // 2) المتصفح (كروم/PWA): Web Speech API — كما كان
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { $("#micStatus").textContent = "المتصفح لا يدعم التعرف الصوتي — اكتب الأمر يدوياً."; return; }
+  if (!SR) { setStatus("المتصفح لا يدعم التعرف الصوتي — اكتب الأمر يدوياً."); return; }
   const rec = new SR();
   rec.lang = "ar-EG"; rec.interimResults = false; rec.maxAlternatives = 1;
-  $("#micStatus").textContent = "🎤 أستمع... تكلم الآن";
+  setStatus("🎤 أستمع... تكلم الآن");
   rec.onresult = (e) => {
     $("#voiceText").value = e.results[0][0].transcript;
-    $("#micStatus").textContent = "تم الاستماع — راجع الأمر ثم اضغط «بحث / تنفيذ».";
+    setStatus("تم الاستماع — راجع الأمر ثم اضغط «بحث / تنفيذ».");
   };
-  rec.onerror = (e) => { $("#micStatus").textContent = "تعذر الاستماع: " + e.error; };
-  rec.onend = () => { if (!$("#voiceText").value) $("#micStatus").textContent = ""; };
+  rec.onerror = (e) => { setStatus("تعذر الاستماع: " + e.error); };
+  rec.onend = () => { if (!$("#voiceText").value) setStatus(""); };
   rec.start();
 }
 async function runVoice() {
