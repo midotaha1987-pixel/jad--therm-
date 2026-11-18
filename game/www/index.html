@@ -311,10 +311,12 @@ section.card{animation:popIn .45s ease both}
 .dad-active.show{display:block;animation:popIn .35s ease}
 .dad-active .txt{font-size:21px;font-weight:900}
 .dad-badges{font-size:30px;letter-spacing:3px;min-height:38px;text-align:center}
-.owl-guide{position:fixed;bottom:14px;inset-inline-start:12px;z-index:65;display:flex;flex-direction:column;align-items:flex-start;gap:8px;max-width:min(290px,78vw)}
+.owl-guide{position:fixed;bottom:14px;inset-inline-start:12px;z-index:65;display:flex;flex-direction:column;align-items:flex-start;gap:8px;max-width:min(290px,78vw);pointer-events:none}
+.owl-guide .owl-btn,.owl-guide .owl-bubble{pointer-events:auto}
 .owl-btn{width:60px;height:60px;min-height:60px;border-radius:50%;border:4px solid #fff;background:linear-gradient(160deg,#8D6E63,#5D4037);font-size:32px;box-shadow:0 8px 20px rgba(0,0,0,.3);padding:0;line-height:1}
 .owl-btn.bounce{animation:heroJump .55s ease 2}
-.owl-bubble{display:none;background:#fff;border:3px solid #8D6E63;border-radius:16px;padding:10px 13px;font-weight:800;font-size:15px;line-height:1.7;box-shadow:0 8px 22px rgba(0,0,0,.2);color:var(--ink)}
+.owl-bubble{display:none;background:#fff;border:3px solid #8D6E63;border-radius:16px;padding:10px 13px;font-weight:800;font-size:15px;line-height:1.7;box-shadow:0 8px 22px rgba(0,0,0,.2);color:var(--ink);cursor:pointer}
+.owl-hint{background:#5D4037;color:#fff;font-weight:900;font-size:13px;border-radius:999px;padding:7px 13px;box-shadow:0 4px 12px rgba(0,0,0,.25);animation:floaty 2.2s ease-in-out infinite;white-space:nowrap;pointer-events:none}
 .owl-bubble.show{display:block;animation:popIn .3s ease}
 .owl-bubble b{color:#5D4037}
 @media (prefers-reduced-motion: reduce){.confetti{display:none} html{scroll-behavior:auto} *{animation:none!important;transition:none!important}}
@@ -879,8 +881,9 @@ section.card{animation:popIn .45s ease both}
 
 <div class="confetti" id="confetti"></div>
 <div class="owl-guide" id="owlGuide">
-  <div class="owl-bubble" id="owlBubble" role="status"></div>
-  <button class="owl-btn" id="owlBtn" aria-label="مرشد المغامرة — البومة الحكيمة، دوس عليها عشان تسمع تلميح">🦉</button>
+  <div class="owl-bubble" id="owlBubble" role="status" title="دوس هنا عشان تسمع الشرح بصوت البومة"></div>
+  <span class="owl-hint">دوس عليّا أشرح لك 🔊</span>
+  <button class="owl-btn" id="owlBtn" aria-label="البومة الحكيمة — دوس عليها عشان تتكلم وتشرح لك اللعبة أو المرحلة بصوتها">🦉</button>
 </div>
 <audio id="player" preload="none"></audio>
 
@@ -1772,32 +1775,70 @@ document.getElementById('chestBtn').addEventListener('click',function(){
   setTimeout(function(){ msg.textContent+=' — الصندوق هيتملي تاني بكرة!'; },600);
 });
 
-/* ---------- 3) Adventure guide: the wise little owl ---------- */
+/* ---------- 3) Adventure guide: the wise owl — she TALKS and explains ----------
+   The owl has her own recorded voice: one clip per section explaining how to
+   play it, plus one clip per adventure-stage type explaining that stage. She
+   speaks out loud when the boys open a section, when a new adventure stage
+   starts, and whenever they tap her (or her bubble) to hear the explanation
+   again — so a hero who can't read yet can still understand every game. */
 var OWL_TIPS={
-  draw:'🦉 <b>البومة الحكيمة بتقول:</b> يا فنان، لوّن على مهلك وجرّب تخلط لونين في المعمل… السحر بيحصل هناك! 🧪',
-  quran:'🦉 <b>البومة الحكيمة بتقول:</b> اسمع السورة كاملة لحد آخر آية وهتاخد بطاقة إنجاز بصورتك على الجدار! 🎧🏆',
-  achievements:'🦉 <b>البومة الحكيمة بتقول:</b> كل بطاقة هنا حكاية نجاح… مين هيعلّق البطاقة الجاية؟ 🏆',
-  adv:'🦉 <b>البومة الحكيمة بتقول:</b> بصوا على أبطالنا فوق الخريطة! كل مستوى تعدّوه بيجروا بنفسهم للمستوى اللي بعده! 🏃',
-  puzzle:'🦉 <b>البومة الحكيمة بتقول:</b> البازل بيبدأ من الركن… دوروا على القطع اللي مكانها باين الأول! 🧩',
-  coop:'🦉 <b>البومة الحكيمة بتقول:</b> في مراحل التعاون، محدش بيعدّي لوحده… إيد لوحدها متسقفش! 🤝',
-  prayer:'🦉 <b>البومة الحكيمة بتقول:</b> الصلاة قبل اللعب دايماً… صلّوا الأول وبعدين دوسوا «صلّيت» بصدق! 🕌',
-  kindness:'🦉 <b>البومة الحكيمة بتقول:</b> الإيد للحضن والمساعدة، مش للضرب أبداً… والكلمة الحلوة صدقة! 💖',
-  memory:'🦉 <b>البومة الحكيمة بتقول:</b> الذاكرة بتقوى بالتركيز… بصوا كويس قبل ما الكروت تتقلب! 👀',
-  mission:'🦉 <b>البومة الحكيمة بتقول:</b> مهمة صغيرة كل يوم بتعمل بطل كبير… يلا يا عمر، اختار مهمة وابدأ! 💪',
-  gallery:'🦉 <b>البومة الحكيمة بتقول:</b> ده معرضكم! كل رسمة بتخلص بتتعلّق هنا باسم اللي رسمها! 🖼️',
-  chest:'🦉 <b>البومة الحكيمة بتقول:</b> الكنز بيحب اللي يصحى بدري ويلعب بحماس… افتحوا الصندوق! 🎁',
-  dad:'🦉 <b>البومة الحكيمة بتقول:</b> تحدي بابا شارة خاصة… خلّصوه بجد وبسرعة عشان تكسبوها! 👨🏆'
+  draw:'🦉 <b>البومة الحكيمة بتقول:</b> يا فنان، لوّن على مهلك: اختار لون وبعدين دوس على أي جزء في الصورة. وجرّب تخلط لونين في معمل الألوان، وامشِ على الخط في التمارين — وهتلاقي استوديو الفنان تحت بأدوات زي الفوتوشوب! 🎨',
+  quran:'🦉 <b>البومة الحكيمة بتقول:</b> هنا بنحفظ القرآن: دوس «اسمع» واسمع السورة بصوت الشيخ، وكرّر وراه، وبعدين حلّ الاختبار وكمّل الآية الناقصة. ولو سمعت السورة كاملة لحد آخر آية هتاخد بطاقة إنجاز بصورتك! 🎧',
+  achievements:'🦉 <b>البومة الحكيمة بتقول:</b> ده جدار الإنجازات: كل بطاقة هنا حكاية نجاح بصورة اللي عملها — حفظ، أو رسم، أو تعاون. مين هيعلّق البطاقة الجاية؟ 🏆',
+  adv:'🦉 <b>البومة الحكيمة بتقول:</b> دي مغامرة السرعة: دوسوا «اجري بسرعة» عشان توصلوا للبوابة، ولمّوا الحلقات الذهبية، وكسّروا الصخرة بضربة البرق. عند البوابة جاوبوا على التحدي صح عشان تعدّوا للمرحلة اللي بعدها — وأنا هشرح لكم كل مرحلة أول ما تبدأ! 🏃',
+  puzzle:'🦉 <b>البومة الحكيمة بتقول:</b> البازل بيتركّب حتة حتة: دوس على قطعة وبعدين على القطعة اللي عايز تبدّل معاها لحد ما الصورة تكمل. ابدأ دايماً من الأركان والحتت اللي مكانها باين! 🧩',
+  coop:'🦉 <b>البومة الحكيمة بتقول:</b> في مراحل التعاون «ساعد أخوك» محدش بيعدّي لوحده: لازم عمر وياسين يشتغلوا سوا ويكملوا بعض — إيد لوحدها متسقّفش! 🤝',
+  prayer:'🦉 <b>البومة الحكيمة بتقول:</b> الصلاة قبل اللعب دايماً: صلّوا الصلاة اللي وقتها جه الأول، وبعدين دوسوا «صلّيت» بصدق — والمرحلة مش هتتعدّى إلا لو صلّيتوا فعلاً! 🕌',
+  kindness:'🦉 <b>البومة الحكيمة بتقول:</b> هنا بنتعلم نحب أخونا ونسمع الكلام: الإيد للحضن والمساعدة، مش للضرب أبداً. كمّلوا المهمات الحلوة واختاروا التصرف الصح في المواقف! 💖',
+  memory:'🦉 <b>البومة الحكيمة بتقول:</b> الذاكرة بتقوى بالتركيز: بصّوا كويس على الكروت قبل ما تتقلب، وافتكروا أماكن الصور عشان تلاقوا كل اتنين شبه بعض! 👀',
+  mission:'🦉 <b>البومة الحكيمة بتقول:</b> مهمة صغيرة كل يوم بتعمل بطل كبير: اختار مهمة من مهمات اليوم يا عمر، وخلّصها بجد — نشاط ومساعدة واعتماد على النفس! 💪',
+  gallery:'🦉 <b>البومة الحكيمة بتقول:</b> ده معرض الأبطال: كل رسمة بتخلّصوها بتتعلّق هنا باسم اللي رسمها — ارسموا كتير واملوا الحيطان فن! 🖼️',
+  chest:'🦉 <b>البومة الحكيمة بتقول:</b> صندوق الكنز بيتملي كل يوم بمفاجأة: نجمة زيادة، أو ملصق جديد، أو قطعة بازل. دوسوا على الصندوق وافتحوه! 🎁',
+  dad:'🦉 <b>البومة الحكيمة بتقول:</b> تحدي بابا شارة خاصة: بابا بيكتب التحدي هنا، وانتوا تخلّصوه بجد وبسرعة وتدوسوا «خلّصنا التحدي» عشان تكسبوا الشارة! 👨🏆',
+  studio:'🦉 <b>البومة الحكيمة بتقول:</b> ده استوديو الفنان، زي فوتوشوب صغير: اختار أداة — قلم أو فرشة أو سطل تلوين أو أشكال أو ملصقات — واختار لون وابدأ. ولو غلطت دوس «ارجع خطوة»! 🖥️'
 };
-var owlSection='draw', owlVoiceFlip=false;
-function showOwlTip(speak){
-  var bub=document.getElementById('owlBubble'); if(!bub) return;
-  bub.innerHTML=OWL_TIPS[owlSection]||OWL_TIPS.draw; bub.classList.add('show');
-  clearTimeout(bub._t); bub._t=setTimeout(function(){ bub.classList.remove('show'); },6000);
-  var btn=document.getElementById('owlBtn'); btn.classList.remove('bounce'); void btn.offsetWidth; btn.classList.add('bounce');
-  if(speak){ owlVoiceFlip=!owlVoiceFlip; play(owlVoiceFlip?'welcome':'bravo'); }
+var OWL_VOICE={draw:'owl-draw',quran:'owl-quran',achievements:'owl-achievements',adv:'owl-adv',puzzle:'owl-puzzle',coop:'owl-coop',prayer:'owl-prayer',kindness:'owl-kindness',memory:'owl-memory',mission:'owl-mission',gallery:'owl-gallery',chest:'owl-chest',dad:'owl-dad',studio:'owl-studio'};
+var OWL_STAGE_LINE={
+  draw:'عند البوابة: سؤال عن الرسم والألوان والأشكال 🎨',
+  quran:'عند البوابة: آية ناقصة كلمة — كمّلوها 📖',
+  puzzle:'عند البوابة: لغز بازل — اختاروا اللي يكمّل الصورة 🧩',
+  prayer:'عند البوابة: سؤال عن الصلوات الخمس 🕌',
+  think:'عند البوابة: سؤال تفكير سريع 🧠',
+  coop:'عند البوابة: فكّروا وجاوبوا سوا — محدش بيعدّي لوحده 🤝'
+};
+var owlSection='draw', owlAudio=new Audio(), owlNowText='', owlNowVoice='owl-hello';
+try{ owlAudio.preload='auto'; }catch(e){}
+function owlSpeak(file){
+  if(!file) return;
+  try{ if(player&&!player.paused){ player.pause(); } }catch(e){}
+  try{
+    owlAudio.src='assets/'+file+'.mp3';
+    var pr=owlAudio.play();
+    if(pr&&pr.catch){ pr.catch(function(){}); }
+  }catch(e){}
 }
-document.getElementById('owlBtn').addEventListener('click',function(){ showOwlTip(true); });
-document.querySelectorAll('[data-go]').forEach(function(b){ b.addEventListener('click',function(){ var g=b.getAttribute('data-go'); if(OWL_TIPS[g]){ owlSection=g; setTimeout(function(){ showOwlTip(false); },700); } }); });
+function owlSay(html,file,speak){
+  var bub=document.getElementById('owlBubble'); if(!bub) return;
+  owlNowText=html; if(file) owlNowVoice=file;
+  bub.innerHTML=html; bub.classList.add('show');
+  clearTimeout(bub._t); bub._t=setTimeout(function(){ bub.classList.remove('show'); },12000);
+  var btn=document.getElementById('owlBtn'); if(btn){ btn.classList.remove('bounce'); void btn.offsetWidth; btn.classList.add('bounce'); }
+  if(speak) owlSpeak(owlNowVoice);
+}
+function showOwlTip(speak){
+  owlSay(OWL_TIPS[owlSection]||OWL_TIPS.draw, OWL_VOICE[owlSection]||'owl-hello', speak);
+}
+function owlStageTip(speak){
+  if(typeof ADV==='undefined'||advI>=ADV.length) return;
+  var s=ADV[advI]; if(!s) return;
+  var wld=WORLDS[s.world];
+  var type=OWL_STAGE_LINE[s.type]?s.type:'think';
+  var html='🦉 <b>البومة بتشرح المرحلة '+(advI+1)+':</b> '+wld.icon+' '+wld.name+' — دوسوا «🏃 اجري بسرعة» لحد البوابة، لمّوا الحلقات الذهبية، وكسّروا الصخرة بـ«⚡ ضربة البرق». '+OWL_STAGE_LINE[type]+' — دوسوا عليّا لو عايزين تسمعوا الشرح تاني! 🔊';
+  owlSay(html,'owl-stage-'+type,speak);
+}
+document.getElementById('owlBtn').addEventListener('click',function(){ owlSay(owlNowText||OWL_TIPS.draw, owlNowVoice, true); });
+document.getElementById('owlBubble').addEventListener('click',function(){ owlSpeak(owlNowVoice); });
+document.querySelectorAll('[data-go]').forEach(function(b){ b.addEventListener('click',function(){ var g=b.getAttribute('data-go'); if(OWL_TIPS[g]){ owlSection=g; setTimeout(function(){ showOwlTip(true); },700); } }); });
 if('IntersectionObserver' in window){
   var owlSeen={};
   var owlObs=new IntersectionObserver(function(entries){
@@ -1805,7 +1846,17 @@ if('IntersectionObserver' in window){
   },{threshold:.3});
   Object.keys(OWL_TIPS).forEach(function(id){ var el=document.getElementById(id); if(el) owlObs.observe(el); });
 }
-setTimeout(function(){ showOwlTip(false); },2500);
+/* Every new adventure stage: the owl steps in and explains it out loud —
+   and stays one tap away if the boys get stuck mid-stage. */
+var _loadAdvOwl=loadAdv;
+loadAdv=function(){
+  _loadAdvOwl();
+  if(typeof ADV!=='undefined'&&advI<ADV.length){ setTimeout(function(){ owlStageTip(true); },450); }
+};
+/* One voice at a time: when the game's own sounds play, the owl politely stops. */
+var _playOwlGuard=play;
+play=function(n){ try{ owlAudio.pause(); }catch(e){} _playOwlGuard(n); };
+setTimeout(function(){ owlSay('🦉 <b>البومة الحكيمة بتقول:</b> أهلاً بيكم يا أبطال! أنا البومة الحكيمة، صاحبكم في المغامرة. لو مش فاهمين أي لعبة أو أي مرحلة، دوسوا عليّا وأنا هشرح لكم كل حاجة بصوتي وأساعدكم! 🔊','owl-hello',false); },2500);
 
 /* ---------- 4) Dad challenge: dad sets it, kids earn the special badge ---------- */
 var dadActiveText='', dadDoneN=0;
@@ -1921,7 +1972,7 @@ document.getElementById('installBtn').addEventListener('click',function(){
 });
 window.addEventListener('appinstalled',function(){ var btn=document.getElementById('installBtn'); if(btn) btn.hidden=true; var msg=document.getElementById('installedMsg'); if(msg) msg.hidden=false; confetti(); showBubble('🎉 اللعبة اتثبّتت على الموبايل! افتحوها من الشاشة الرئيسية على طول!'); });
 syncInstallUI();
-if('serviceWorker' in navigator){ try{ navigator.serviceWorker.register('data:application/javascript;base64,Lyog2YXYutin2YXYsdin2Kog2LnZhdixINmI2YrYp9iz2YrZhiDigJQgc2VydmljZSB3b3JrZXI6IGNhY2hlIHRoZSBnYW1lIHNvIGl0IGNhbiBvcGVuIG9mZmxpbmUuCiAgIE5PVEU6IHRoaXMgZmlsZSBsaXZlcyB1bmRlciBhc3NldHMvIGJlY2F1c2UgdGhlIGFydGlmYWN0IGhvc3Qgc2VydmVzIG9ubHkKICAgaW5kZXguaHRtbCArIGFzc2V0cy8uIEEgc2VydmljZSB3b3JrZXIgY2FuIG9ubHkgY29udHJvbCBwYWdlcyBpbnNpZGUgaXRzCiAgIG93biBmb2xkZXIgc2NvcGUsIHNvIG9uIHRoaXMgaG9zdCBpdCBjYW5ub3QgdGFrZSBjb250cm9sIG9mIHRoZSBtYWluIHBhZ2UKICAgKHdoaWNoIHNpdHMgb25lIGxldmVsIHVwKS4gSXQgaXMgcmVnaXN0ZXJlZCBiZXN0LWVmZm9ydCBieSB0aGUgcGFnZSBhbmQKICAgYmVjb21lcyBmdWxseSBlZmZlY3RpdmUgaWYgdGhlIGdhbWUgaXMgZXZlciBob3N0ZWQgd2l0aCBzdy5qcyBhdCB0aGUKICAgc2l0ZSByb290IChlLmcuIGluc2lkZSBhbiBBUEsgd3JhcHBlciBvciBhIHJvb3QgZGVwbG95bWVudCkuICovCnZhciBDQUNIRSA9ICdveS1nYW1lLXYxJzsKdmFyIENPUkUgPSBbCiAgJy4uL2luZGV4Lmh0bWwnLAogICcuL21hbmlmZXN0LndlYm1hbmlmZXN0JywKICAnLi9pY29uLTE5Mi5wbmcnLAogICcuL2ljb24tNTEyLnBuZycsCiAgJy4vb21hci1hdmF0YXIuanBnJywKICAnLi95YXNzaW4tYXZhdGFyLmpwZycsCiAgJy4vb21hci5qcGcnLAogICcuL3lhc3Npbi5qcGcnLAogICcuL3dlbGNvbWUubXAzJywKICAnLi9hcnRpc3QubXAzJywKICAnLi9icmF2by5tcDMnLAogICcuL2NvcnJlY3QubXAzJywKICAnLi90cnlhZ2Fpbi5tcDMnLAogICcuL2ZpbmlzaC5tcDMnLAogICcuL21pc3Npb24ubXAzJywKICAnLi9xdXJhbi5tcDMnLAogICcuL2lraGxhcy5tcDMnLAogICcuL2ZhbGFxLm1wMycsCiAgJy4vbmFzLm1wMycsCiAgJy4va2F3dGhhci5tcDMnLAogICcuL2Fzci5tcDMnLAogICcuL25hc3IubXAzJywKICAnLi9xdXJheXNoLm1wMycsCiAgJy4vbWFzYWQubXAzJywKICAnLi9tdWxrMS5tcDMnLAogICcuL211bGsyLm1wMycsCiAgJy4vcWFsYW0xLm1wMycsCiAgJy4vaGFxcWFoMS5tcDMnCl07CnNlbGYuYWRkRXZlbnRMaXN0ZW5lcignaW5zdGFsbCcsIGZ1bmN0aW9uIChlKSB7CiAgZS53YWl0VW50aWwoCiAgICBjYWNoZXMub3BlbihDQUNIRSkudGhlbihmdW5jdGlvbiAoYykgeyByZXR1cm4gYy5hZGRBbGwoQ09SRSk7IH0pLmNhdGNoKGZ1bmN0aW9uICgpIHt9KQogICAgICAudGhlbihmdW5jdGlvbiAoKSB7IHJldHVybiBzZWxmLnNraXBXYWl0aW5nKCk7IH0pCiAgKTsKfSk7CnNlbGYuYWRkRXZlbnRMaXN0ZW5lcignYWN0aXZhdGUnLCBmdW5jdGlvbiAoZSkgewogIGUud2FpdFVudGlsKAogICAgY2FjaGVzLmtleXMoKS50aGVuKGZ1bmN0aW9uIChrZXlzKSB7CiAgICAgIHJldHVybiBQcm9taXNlLmFsbChrZXlzLm1hcChmdW5jdGlvbiAoaykgeyByZXR1cm4gayA9PT0gQ0FDSEUgPyBudWxsIDogY2FjaGVzLmRlbGV0ZShrKTsgfSkpOwogICAgfSkudGhlbihmdW5jdGlvbiAoKSB7IHJldHVybiBzZWxmLmNsaWVudHMuY2xhaW0oKTsgfSkKICApOwp9KTsKc2VsZi5hZGRFdmVudExpc3RlbmVyKCdmZXRjaCcsIGZ1bmN0aW9uIChlKSB7CiAgaWYgKGUucmVxdWVzdC5tZXRob2QgIT09ICdHRVQnKSByZXR1cm47CiAgZS5yZXNwb25kV2l0aCgKICAgIGNhY2hlcy5tYXRjaChlLnJlcXVlc3QpLnRoZW4oZnVuY3Rpb24gKGhpdCkgewogICAgICByZXR1cm4gaGl0IHx8IGZldGNoKGUucmVxdWVzdCkudGhlbihmdW5jdGlvbiAocmVzKSB7CiAgICAgICAgdmFyIGNvcHkgPSByZXMuY2xvbmUoKTsKICAgICAgICBjYWNoZXMub3BlbihDQUNIRSkudGhlbihmdW5jdGlvbiAoYykgeyBjLnB1dChlLnJlcXVlc3QsIGNvcHkpOyB9KS5jYXRjaChmdW5jdGlvbiAoKSB7fSk7CiAgICAgICAgcmV0dXJuIHJlczsKICAgICAgfSk7CiAgICB9KQogICk7Cn0pOwo=').catch(function(){}); }catch(e){} }
+if('serviceWorker' in navigator){ try{ navigator.serviceWorker.register('data:application/javascript;base64,Lyog2YXYutin2YXYsdin2Kog2LnZhdixINmI2YrYp9iz2YrZhiDigJQgc2VydmljZSB3b3JrZXI6IGNhY2hlIHRoZSBnYW1lIHNvIGl0IGNhbiBvcGVuIG9mZmxpbmUuCiAgIE5PVEU6IHRoaXMgZmlsZSBsaXZlcyB1bmRlciBhc3NldHMvIGJlY2F1c2UgdGhlIGFydGlmYWN0IGhvc3Qgc2VydmVzIG9ubHkKICAgaW5kZXguaHRtbCArIGFzc2V0cy8uIEEgc2VydmljZSB3b3JrZXIgY2FuIG9ubHkgY29udHJvbCBwYWdlcyBpbnNpZGUgaXRzCiAgIG93biBmb2xkZXIgc2NvcGUsIHNvIG9uIHRoaXMgaG9zdCBpdCBjYW5ub3QgdGFrZSBjb250cm9sIG9mIHRoZSBtYWluIHBhZ2UKICAgKHdoaWNoIHNpdHMgb25lIGxldmVsIHVwKS4gSXQgaXMgcmVnaXN0ZXJlZCBiZXN0LWVmZm9ydCBieSB0aGUgcGFnZSBhbmQKICAgYmVjb21lcyBmdWxseSBlZmZlY3RpdmUgaWYgdGhlIGdhbWUgaXMgZXZlciBob3N0ZWQgd2l0aCBzdy5qcyBhdCB0aGUKICAgc2l0ZSByb290IChlLmcuIGluc2lkZSBhbiBBUEsgd3JhcHBlciBvciBhIHJvb3QgZGVwbG95bWVudCkuICovCnZhciBDQUNIRSA9ICdveS1nYW1lLXYyJzsKdmFyIENPUkUgPSBbCiAgJy4uL2luZGV4Lmh0bWwnLAogICcuL21hbmlmZXN0LndlYm1hbmlmZXN0JywKICAnLi9pY29uLTE5Mi5wbmcnLAogICcuL2ljb24tNTEyLnBuZycsCiAgJy4vb21hci1hdmF0YXIuanBnJywKICAnLi95YXNzaW4tYXZhdGFyLmpwZycsCiAgJy4vb21hci5qcGcnLAogICcuL3lhc3Npbi5qcGcnLAogICcuL3dlbGNvbWUubXAzJywKICAnLi9hcnRpc3QubXAzJywKICAnLi9icmF2by5tcDMnLAogICcuL2NvcnJlY3QubXAzJywKICAnLi90cnlhZ2Fpbi5tcDMnLAogICcuL2ZpbmlzaC5tcDMnLAogICcuL21pc3Npb24ubXAzJywKICAnLi9xdXJhbi5tcDMnLAogICcuL2lraGxhcy5tcDMnLAogICcuL2ZhbGFxLm1wMycsCiAgJy4vbmFzLm1wMycsCiAgJy4va2F3dGhhci5tcDMnLAogICcuL2Fzci5tcDMnLAogICcuL25hc3IubXAzJywKICAnLi9xdXJheXNoLm1wMycsCiAgJy4vbWFzYWQubXAzJywKICAnLi9tdWxrMS5tcDMnLAogICcuL211bGsyLm1wMycsCiAgJy4vcWFsYW0xLm1wMycsCiAgJy4vaGFxcWFoMS5tcDMnLAogICcuL293bC1oZWxsby5tcDMnLAogICcuL293bC1kcmF3Lm1wMycsCiAgJy4vb3dsLXF1cmFuLm1wMycsCiAgJy4vb3dsLWFkdi5tcDMnLAogICcuL293bC1wdXp6bGUubXAzJywKICAnLi9vd2wtY29vcC5tcDMnLAogICcuL293bC1wcmF5ZXIubXAzJywKICAnLi9vd2wta2luZG5lc3MubXAzJywKICAnLi9vd2wtbWVtb3J5Lm1wMycsCiAgJy4vb3dsLW1pc3Npb24ubXAzJywKICAnLi9vd2wtZ2FsbGVyeS5tcDMnLAogICcuL293bC1hY2hpZXZlbWVudHMubXAzJywKICAnLi9vd2wtY2hlc3QubXAzJywKICAnLi9vd2wtZGFkLm1wMycsCiAgJy4vb3dsLXN0dWRpby5tcDMnLAogICcuL293bC1zdGFnZS1kcmF3Lm1wMycsCiAgJy4vb3dsLXN0YWdlLXF1cmFuLm1wMycsCiAgJy4vb3dsLXN0YWdlLXB1enpsZS5tcDMnLAogICcuL293bC1zdGFnZS1wcmF5ZXIubXAzJywKICAnLi9vd2wtc3RhZ2UtdGhpbmsubXAzJywKICAnLi9vd2wtc3RhZ2UtY29vcC5tcDMnCl07CnNlbGYuYWRkRXZlbnRMaXN0ZW5lcignaW5zdGFsbCcsIGZ1bmN0aW9uIChlKSB7CiAgZS53YWl0VW50aWwoCiAgICBjYWNoZXMub3BlbihDQUNIRSkudGhlbihmdW5jdGlvbiAoYykgeyByZXR1cm4gYy5hZGRBbGwoQ09SRSk7IH0pLmNhdGNoKGZ1bmN0aW9uICgpIHt9KQogICAgICAudGhlbihmdW5jdGlvbiAoKSB7IHJldHVybiBzZWxmLnNraXBXYWl0aW5nKCk7IH0pCiAgKTsKfSk7CnNlbGYuYWRkRXZlbnRMaXN0ZW5lcignYWN0aXZhdGUnLCBmdW5jdGlvbiAoZSkgewogIGUud2FpdFVudGlsKAogICAgY2FjaGVzLmtleXMoKS50aGVuKGZ1bmN0aW9uIChrZXlzKSB7CiAgICAgIHJldHVybiBQcm9taXNlLmFsbChrZXlzLm1hcChmdW5jdGlvbiAoaykgeyByZXR1cm4gayA9PT0gQ0FDSEUgPyBudWxsIDogY2FjaGVzLmRlbGV0ZShrKTsgfSkpOwogICAgfSkudGhlbihmdW5jdGlvbiAoKSB7IHJldHVybiBzZWxmLmNsaWVudHMuY2xhaW0oKTsgfSkKICApOwp9KTsKc2VsZi5hZGRFdmVudExpc3RlbmVyKCdmZXRjaCcsIGZ1bmN0aW9uIChlKSB7CiAgaWYgKGUucmVxdWVzdC5tZXRob2QgIT09ICdHRVQnKSByZXR1cm47CiAgZS5yZXNwb25kV2l0aCgKICAgIGNhY2hlcy5tYXRjaChlLnJlcXVlc3QpLnRoZW4oZnVuY3Rpb24gKGhpdCkgewogICAgICByZXR1cm4gaGl0IHx8IGZldGNoKGUucmVxdWVzdCkudGhlbihmdW5jdGlvbiAocmVzKSB7CiAgICAgICAgdmFyIGNvcHkgPSByZXMuY2xvbmUoKTsKICAgICAgICBjYWNoZXMub3BlbihDQUNIRSkudGhlbihmdW5jdGlvbiAoYykgeyBjLnB1dChlLnJlcXVlc3QsIGNvcHkpOyB9KS5jYXRjaChmdW5jdGlvbiAoKSB7fSk7CiAgICAgICAgcmV0dXJuIHJlczsKICAgICAgfSk7CiAgICB9KQogICk7Cn0pOwo=').catch(function(){}); }catch(e){} }
 </script>
 </body>
 </html>
