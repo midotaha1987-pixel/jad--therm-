@@ -1876,19 +1876,82 @@ function micErrText(err){
   if(n==='NotSupportedError'){ return 'المتصفح ده مش بيدعم التسجيل — افتحوا اللعبة من متصفح كروم أو من التطبيق المثبّت على الموبايل 🎤'; }
   return 'المايك مشتغلش'+(n?' ('+n+')':'')+' — جرّبوا تاني، أو سمّعوا لبابا وماما على طول 🎤';
 }
+/* ---------- Native mic (Capacitor): real audio recording in the APK ----------
+   The WebView's getUserMedia/MediaRecorder never delivers audio in this APK,
+   even with the mic permission allowed, so on a native build we record with
+   the capacitor-voice-recorder plugin (Android MediaRecorder, AAC) and play
+   the take back from a data: URL through the same Audio players. In a plain
+   browser (no Capacitor) the web path below is used unchanged. */
+function nativeVoiceRec(){
+  try{ var Cap=window.Capacitor;
+    if(Cap&&Cap.isNativePlatform&&Cap.isNativePlatform()&&Cap.Plugins&&Cap.Plugins.VoiceRecorder) return Cap.Plugins.VoiceRecorder;
+  }catch(e){}
+  return null;
+}
+async function nativeRecStart(msgEl){
+  var vr=nativeVoiceRec(); if(!vr) return false;
+  try{
+    var perm=await vr.hasAudioRecordingPermission();
+    if(!perm||!perm.value) perm=await vr.requestAudioRecordingPermission();
+    if(!perm||!perm.value){
+      if(msgEl) msgEl.textContent='المايك مقفول! فعّلوه من إعدادات الموبايل: الإعدادات ← التطبيقات ← مغامرات عمر وياسين ← الأذونات ← الميكروفون ← سماح. ولو ظهرت لكم رسالة دلوقتي دوسوا «سماح» على طول. وبعد ما تفعّلوه ارجعوا جرّبوا التسجيل تاني 🎤';
+      return 'denied';
+    }
+    var st=await vr.startRecording();
+    if(!st||!st.value) return 'error';
+    return true;
+  }catch(e){ return 'error'; }
+}
+async function nativeRecStop(){
+  var vr=nativeVoiceRec(); if(!vr) return null;
+  try{
+    var r=await vr.stopRecording();
+    if(!r||!r.value||!r.value.recordDataBase64) return null;
+    var mt=r.value.mimeType||'audio/aac';
+    return { url:'data:'+mt+';base64,'+r.value.recordDataBase64, dur:((r.value.msDuration||0)/1000), mime:mt };
+  }catch(e){ return null; }
+}
+
 /* Recording helpers shared by every mic in the game: a live seconds
    timer while recording, the finished take's length, and a dedicated
    player for each take so the last recording can be replayed again
    and again (the shared game-sound player never overwrites it). */
 function fmtClock(sec){ sec=Math.max(0,Math.floor(sec)); var m=Math.floor(sec/60), s=sec%60, d='٠١٢٣٤٥٦٧٨٩'; function ar(n){ return (''+n).replace(/\d/g,function(c){ return d[+c]; }); } return ar(m)+':'+(s<10?'٠':'')+ar(s); }
 function makeRecTimer(onTick){ var t0=0, iv=null; return { start:function(){ t0=Date.now(); onTick(0); iv=setInterval(function(){ onTick((Date.now()-t0)/1000); },250); }, stop:function(){ if(iv){ clearInterval(iv); iv=null; } return t0?(Date.now()-t0)/1000:0; } }; }
-var mediaRec=null, recChunks=[], recUrl=null, recording=false, recMime='', recDur=0;
+var mediaRec=null, recChunks=[], recUrl=null, recording=false, recMime='', recDur=0, recNative=false, recBusy=false;
 var micAudio=new Audio();
 var micTimer=makeRecTimer(function(s){ document.getElementById('micTimerN').textContent=fmtClock(s); });
 function micTimerShow(on){ document.getElementById('micTimer').classList.toggle('on',!!on); }
+
+/* Native take for the Quran recitation mic: same buttons/messages as the
+   web take, recording via the plugin and playing the data: URL through the
+   shared micAudio player. */
+async function micStartNative(btn,msg){
+  if(recBusy) return; recBusy=true;
+  var ok=await nativeRecStart(msg);
+  if(ok!==true){ recBusy=false; if(ok==='error'){ msg.textContent='المايك مشتغلش — جرّب تاني، أو سمّع لبابا وماما على طول 🎤'; } return; }
+  recording=true; recNative=true; btn.classList.add('rec'); btn.textContent='⏹️ وقّف التسجيل'; micTimerShow(true); micTimer.start(); msg.textContent='بيسجّل… سمّع بصوت عالي وواضح يا حافظ! 🎙️';
+  recBusy=false;
+}
+async function micStopNative(btn,msg){
+  if(recBusy) return; recBusy=true;
+  var take=await nativeRecStop();
+  var tdur=micTimer.stop(); micTimerShow(false);
+  recording=false; recNative=false; recBusy=false;
+  btn.classList.remove('rec'); btn.textContent='🎤 سجّل تسميعي';
+  if(!take){ msg.textContent='التسجيل مخلّصش بصوت — جرّب تاني واتكلم بصوت عالي 🎤'; return; }
+  var dur=take.dur>0?take.dur:tdur;
+  if(recUrl){ try{ URL.revokeObjectURL(recUrl); }catch(e){} }
+  recUrl=take.url; recDur=dur;
+  var pb=document.getElementById('micPlay'); pb.disabled=false; pb.textContent='🔊 اسمع تسجيلي من الأول';
+  msg.textContent='✅ اتسجّل تسميعك ('+fmtClock(dur)+')! هنشغّله لك دلوقتي على طول — ودوس الزرار الأخضر الكبير أي وقت عشان تسمعه تاني من الأول 🎧';
+  try{ micAudio.pause(); micAudio.src=recUrl; micAudio.currentTime=0; var ap=micAudio.play(); if(ap&&ap.catch){ ap.catch(function(){ msg.textContent='✅ اتسجّل تسميعك ('+fmtClock(dur)+')! دوس الزرار الأخضر الكبير «اسمع تسجيلي» واسمع صوتك — وكل ما تدوس هيشتغل من الأول 🎧'; }); } }catch(e){}
+}
+
 document.getElementById('micRec').addEventListener('click',function(){
  var btn=this, msg=document.getElementById('micMsg');
- if(recording){ if(mediaRec) mediaRec.stop(); return; }
+ if(recording){ if(recNative){ micStopNative(btn,msg); } else if(mediaRec){ mediaRec.stop(); } return; }
+ if(nativeVoiceRec()){ micStartNative(btn,msg); return; }
  if(!navigator.mediaDevices||!window.MediaRecorder){ msg.textContent='المايك مش متاح هنا — افتحوا اللعبة من متصفح كروم أو من التطبيق المثبّت على الموبايل، أو سمّعوا بصوت عالي لبابا وماما على طول! 🎤'; return; }
  navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
    if(!stream||!stream.getAudioTracks||!stream.getAudioTracks().length){ if(stream&&stream.getTracks) stream.getTracks().forEach(function(t){t.stop();}); msg.textContent='المايك اتفتح بس مفيش صوت واصل — جرّب تقرّب من المايك أو أعد المحاولة 🎤'; return; }
@@ -2007,10 +2070,31 @@ var heroVoiceAudio=new Audio();
 function playHeroVoice(kid){ var u=heroVoices[kid]; if(!u) return false; try{ heroVoiceAudio.pause(); heroVoiceAudio.src=u; heroVoiceAudio.currentTime=0; var p=heroVoiceAudio.play(); if(p&&p.catch){ p.catch(function(){}); } return true; }catch(e){ return false; } }
 function setupVoice(kid,recId,playId,statusId){
   var recBtn=document.getElementById(recId), playBtn=document.getElementById(playId), status=document.getElementById(statusId);
-  var rec=null, chunks=[], on=false, streamRef=null;
+  var rec=null, chunks=[], on=false, streamRef=null, nativeOn=false, nativeBusy=false;
   var timer=makeRecTimer(function(s){ status.innerHTML='🔴 بيسجّل… <span class="voice-timer">'+fmtClock(s)+'</span> — قول بصوت واضح وحلو: «أنا '+KIDINFO[kid].name+'!» 🎙️'; });
+
+  /* Native take for this hero's voice: same flow as the web take. */
+  async function voiceStartNative(){
+    if(nativeBusy) return; nativeBusy=true;
+    var ok=await nativeRecStart(status);
+    if(ok!==true){ nativeBusy=false; if(ok==='error'){ status.textContent='المايك مشتغلش — جرّبوا تاني 🎤'; } return; }
+    on=true; nativeOn=true; recBtn.classList.add('rec'); recBtn.textContent='⏹️ وقّف التسجيل'; timer.start();
+    nativeBusy=false;
+  }
+  async function voiceStopNative(){
+    if(nativeBusy) return; nativeBusy=true;
+    var take=await nativeRecStop();
+    var dur=timer.stop(); nativeBusy=false;
+    on=false; nativeOn=false; recBtn.classList.remove('rec'); recBtn.textContent='🎤 سجّل «أنا '+KIDINFO[kid].name+'!»';
+    if(!take){ status.textContent='التسجيل مخلّصش بصوت — جرّبوا تاني واتكلموا بصوت عالي 🎤'; return; }
+    if(heroVoices[kid]){ try{ URL.revokeObjectURL(heroVoices[kid]); }catch(e){} }
+    heroVoices[kid]=take.url; heroVoiceDur[kid]=take.dur>0?take.dur:dur; playBtn.disabled=false;
+    status.textContent='✅ اتسجّل صوت '+KIDINFO[kid].name+' ('+fmtClock(heroVoiceDur[kid])+')! شخصيته في اللعبة هتتكلم بصوته — دوس «اسمع صوت '+KIDINFO[kid].name+'» واسمعه كل مرة، أو دوس على صورته فوق!';
+    celebrateKid(kid); showBubble('🎙️ صوت '+KIDINFO[kid].name+' بقى جوه اللعبة!'); playHeroVoice(kid);
+  }
   recBtn.addEventListener('click',function(){
-    if(on){ if(rec) rec.stop(); return; }
+    if(on){ if(nativeOn){ voiceStopNative(); } else if(rec){ rec.stop(); } return; }
+    if(nativeVoiceRec()){ voiceStartNative(); return; }
     if(!navigator.mediaDevices||!window.MediaRecorder){ status.textContent='المايك مش متاح هنا — افتحوا اللعبة من متصفح كروم أو من التطبيق المثبّت على الموبايل، أو قولوا الجملة بصوت عالي وانتوا بتلعبوا! 🎤'; return; }
     navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
       if(!stream||!stream.getAudioTracks||!stream.getAudioTracks().length){ if(stream&&stream.getTracks) stream.getTracks().forEach(function(t){t.stop();}); status.textContent='المايك اتفتح بس مفيش صوت واصل — جرّبوا تاني وتقرّبوا من المايك 🎤'; return; }
@@ -3424,7 +3508,7 @@ document.getElementById('installBtn').addEventListener('click',function(){
 });
 window.addEventListener('appinstalled',function(){ var btn=document.getElementById('installBtn'); if(btn) btn.hidden=true; var msg=document.getElementById('installedMsg'); if(msg) msg.hidden=false; confetti(); showBubble('🎉 اللعبة اتثبّتت على الموبايل! افتحوها من الشاشة الرئيسية على طول!'); });
 syncInstallUI();
-if('serviceWorker' in navigator){ try{ navigator.serviceWorker.register('data:application/javascript;base64,Lyog2YXYutin2YXYsdin2Kog2LnZhdixINmI2YrYp9iz2YrZhiDigJQgc2VydmljZSB3b3JrZXI6IGNhY2hlIHRoZSBnYW1lIHNvIGl0IGNhbiBvcGVuIG9mZmxpbmUuCiAgIE5PVEU6IHRoaXMgZmlsZSBsaXZlcyB1bmRlciBhc3NldHMvIGJlY2F1c2UgdGhlIGFydGlmYWN0IGhvc3Qgc2VydmVzIG9ubHkKICAgaW5kZXguaHRtbCArIGFzc2V0cy8uIEEgc2VydmljZSB3b3JrZXIgY2FuIG9ubHkgY29udHJvbCBwYWdlcyBpbnNpZGUgaXRzCiAgIG93biBmb2xkZXIgc2NvcGUsIHNvIG9uIHRoaXMgaG9zdCBpdCBjYW5ub3QgdGFrZSBjb250cm9sIG9mIHRoZSBtYWluIHBhZ2UKICAgKHdoaWNoIHNpdHMgb25lIGxldmVsIHVwKS4gSXQgaXMgcmVnaXN0ZXJlZCBiZXN0LWVmZm9ydCBieSB0aGUgcGFnZSBhbmQKICAgYmVjb21lcyBmdWxseSBlZmZlY3RpdmUgaWYgdGhlIGdhbWUgaXMgZXZlciBob3N0ZWQgd2l0aCBzdy5qcyBhdCB0aGUKICAgc2l0ZSByb290IChlLmcuIGluc2lkZSBhbiBBUEsgd3JhcHBlciBvciBhIHJvb3QgZGVwbG95bWVudCkuICovCnZhciBDQUNIRSA9ICdveS1nYW1lLXYxMCc7CnZhciBDT1JFID0gWwogICcuLi9pbmRleC5odG1sJywKICAnLi93ZWxjb21lLm1wMycsCiAgJy4vYXJ0aXN0Lm1wMycsCiAgJy4vYnJhdm8ubXAzJywKICAnLi9jb3JyZWN0Lm1wMycsCiAgJy4vdHJ5YWdhaW4ubXAzJywKICAnLi9maW5pc2gubXAzJywKICAnLi9taXNzaW9uLm1wMycsCiAgJy4vcXVyYW4ubXAzJywKICAnLi9pa2hsYXMubXAzJywKICAnLi9mYWxhcS5tcDMnLAogICcuL25hcy5tcDMnLAogICcuL2thd3RoYXIubXAzJywKICAnLi9hc3IubXAzJywKICAnLi9uYXNyLm1wMycsCiAgJy4vcXVyYXlzaC5tcDMnLAogICcuL21hc2FkLm1wMycsCiAgJy4vbXVsazEubXAzJywKICAnLi9tdWxrMi5tcDMnLAogICcuL3FhbGFtMS5tcDMnLAogICcuL2hhcXFhaDEubXAzJywKICAnLi9vd2wtaGVsbG8ubXAzJywKICAnLi9vd2wtZHJhdy5tcDMnLAogICcuL293bC1xdXJhbi5tcDMnLAogICcuL293bC1hZHYubXAzJywKICAnLi9vd2wtcHV6emxlLm1wMycsCiAgJy4vb3dsLWNvb3AubXAzJywKICAnLi9vd2wtcHJheWVyLm1wMycsCiAgJy4vb3dsLWtpbmRuZXNzLm1wMycsCiAgJy4vb3dsLW1lbW9yeS5tcDMnLAogICcuL293bC1taXNzaW9uLm1wMycsCiAgJy4vb3dsLWdhbGxlcnkubXAzJywKICAnLi9vd2wtYWNoaWV2ZW1lbnRzLm1wMycsCiAgJy4vb3dsLWNoZXN0Lm1wMycsCiAgJy4vb3dsLWRhZC5tcDMnLAogICcuL293bC1zdHVkaW8ubXAzJywKICAnLi9vd2wtc3RhZ2UtZHJhdy5tcDMnLAogICcuL293bC1zdGFnZS1xdXJhbi5tcDMnLAogICcuL293bC1zdGFnZS1wdXp6bGUubXAzJywKICAnLi9vd2wtc3RhZ2UtcHJheWVyLm1wMycsCiAgJy4vb3dsLXN0YWdlLXRoaW5rLm1wMycsCiAgJy4vb3dsLXN0YWdlLWNvb3AubXAzJywKICAnLi9uYXNoZWVkLXRhbGFhLm1wMycsCiAgJy4vbmFzaGVlZC1oYWJpYmkubXAzJywKICAnLi9uYXNoZWVkLXNhbGx1Lm1wMycsCiAgJy4vbmFzaGVlZC10YXliYS5tcDMnLAogICcuL25hc2hlZWQtcWFtYXIubXAzJywKICAnLi9uYXNoZWVkLW5hYmlzYWxhbS5tcDMnLAogICcuL25hc2hlZWQtbWF3bGF5YS5tcDMnLAogICcuL25hc2hlZWQtbGFtbWEubXAzJywKICAnLi9uYXNoZWVkLW1hbnNhbGxheXQubXAzJywKXTsKc2VsZi5hZGRFdmVudExpc3RlbmVyKCdpbnN0YWxsJywgZnVuY3Rpb24gKGUpIHsKICBlLndhaXRVbnRpbCgKICAgIGNhY2hlcy5vcGVuKENBQ0hFKS50aGVuKGZ1bmN0aW9uIChjKSB7IHJldHVybiBjLmFkZEFsbChDT1JFKTsgfSkuY2F0Y2goZnVuY3Rpb24gKCkge30pCiAgICAgIC50aGVuKGZ1bmN0aW9uICgpIHsgcmV0dXJuIHNlbGYuc2tpcFdhaXRpbmcoKTsgfSkKICApOwp9KTsKc2VsZi5hZGRFdmVudExpc3RlbmVyKCdhY3RpdmF0ZScsIGZ1bmN0aW9uIChlKSB7CiAgZS53YWl0VW50aWwoCiAgICBjYWNoZXMua2V5cygpLnRoZW4oZnVuY3Rpb24gKGtleXMpIHsKICAgICAgcmV0dXJuIFByb21pc2UuYWxsKGtleXMubWFwKGZ1bmN0aW9uIChrKSB7IHJldHVybiBrID09PSBDQUNIRSA/IG51bGwgOiBjYWNoZXMuZGVsZXRlKGspOyB9KSk7CiAgICB9KS50aGVuKGZ1bmN0aW9uICgpIHsgcmV0dXJuIHNlbGYuY2xpZW50cy5jbGFpbSgpOyB9KQogICk7Cn0pOwpzZWxmLmFkZEV2ZW50TGlzdGVuZXIoJ2ZldGNoJywgZnVuY3Rpb24gKGUpIHsKICBpZiAoZS5yZXF1ZXN0Lm1ldGhvZCAhPT0gJ0dFVCcpIHJldHVybjsKICBlLnJlc3BvbmRXaXRoKAogICAgY2FjaGVzLm1hdGNoKGUucmVxdWVzdCkudGhlbihmdW5jdGlvbiAoaGl0KSB7CiAgICAgIHJldHVybiBoaXQgfHwgZmV0Y2goZS5yZXF1ZXN0KS50aGVuKGZ1bmN0aW9uIChyZXMpIHsKICAgICAgICB2YXIgY29weSA9IHJlcy5jbG9uZSgpOwogICAgICAgIGNhY2hlcy5vcGVuKENBQ0hFKS50aGVuKGZ1bmN0aW9uIChjKSB7IGMucHV0KGUucmVxdWVzdCwgY29weSk7IH0pLmNhdGNoKGZ1bmN0aW9uICgpIHt9KTsKICAgICAgICByZXR1cm4gcmVzOwogICAgICB9KTsKICAgIH0pCiAgKTsKfSk7Cg==').catch(function(){}); }catch(e){} }
+if('serviceWorker' in navigator){ try{ navigator.serviceWorker.register('data:application/javascript;base64,Lyog2YXYutin2YXYsdin2Kog2LnZhdixINmI2YrYp9iz2YrZhiDigJQgc2VydmljZSB3b3JrZXI6IGNhY2hlIHRoZSBnYW1lIHNvIGl0IGNhbiBvcGVuIG9mZmxpbmUuCiAgIE5PVEU6IHRoaXMgZmlsZSBsaXZlcyB1bmRlciBhc3NldHMvIGJlY2F1c2UgdGhlIGFydGlmYWN0IGhvc3Qgc2VydmVzIG9ubHkKICAgaW5kZXguaHRtbCArIGFzc2V0cy8uIEEgc2VydmljZSB3b3JrZXIgY2FuIG9ubHkgY29udHJvbCBwYWdlcyBpbnNpZGUgaXRzCiAgIG93biBmb2xkZXIgc2NvcGUsIHNvIG9uIHRoaXMgaG9zdCBpdCBjYW5ub3QgdGFrZSBjb250cm9sIG9mIHRoZSBtYWluIHBhZ2UKICAgKHdoaWNoIHNpdHMgb25lIGxldmVsIHVwKS4gSXQgaXMgcmVnaXN0ZXJlZCBiZXN0LWVmZm9ydCBieSB0aGUgcGFnZSBhbmQKICAgYmVjb21lcyBmdWxseSBlZmZlY3RpdmUgaWYgdGhlIGdhbWUgaXMgZXZlciBob3N0ZWQgd2l0aCBzdy5qcyBhdCB0aGUKICAgc2l0ZSByb290IChlLmcuIGluc2lkZSBhbiBBUEsgd3JhcHBlciBvciBhIHJvb3QgZGVwbG95bWVudCkuICovCnZhciBDQUNIRSA9ICdveS1nYW1lLXYxMSc7CnZhciBDT1JFID0gWwogICcuLi9pbmRleC5odG1sJywKICAnLi93ZWxjb21lLm1wMycsCiAgJy4vYXJ0aXN0Lm1wMycsCiAgJy4vYnJhdm8ubXAzJywKICAnLi9jb3JyZWN0Lm1wMycsCiAgJy4vdHJ5YWdhaW4ubXAzJywKICAnLi9maW5pc2gubXAzJywKICAnLi9taXNzaW9uLm1wMycsCiAgJy4vcXVyYW4ubXAzJywKICAnLi9pa2hsYXMubXAzJywKICAnLi9mYWxhcS5tcDMnLAogICcuL25hcy5tcDMnLAogICcuL2thd3RoYXIubXAzJywKICAnLi9hc3IubXAzJywKICAnLi9uYXNyLm1wMycsCiAgJy4vcXVyYXlzaC5tcDMnLAogICcuL21hc2FkLm1wMycsCiAgJy4vbXVsazEubXAzJywKICAnLi9tdWxrMi5tcDMnLAogICcuL3FhbGFtMS5tcDMnLAogICcuL2hhcXFhaDEubXAzJywKICAnLi9vd2wtaGVsbG8ubXAzJywKICAnLi9vd2wtZHJhdy5tcDMnLAogICcuL293bC1xdXJhbi5tcDMnLAogICcuL293bC1hZHYubXAzJywKICAnLi9vd2wtcHV6emxlLm1wMycsCiAgJy4vb3dsLWNvb3AubXAzJywKICAnLi9vd2wtcHJheWVyLm1wMycsCiAgJy4vb3dsLWtpbmRuZXNzLm1wMycsCiAgJy4vb3dsLW1lbW9yeS5tcDMnLAogICcuL293bC1taXNzaW9uLm1wMycsCiAgJy4vb3dsLWdhbGxlcnkubXAzJywKICAnLi9vd2wtYWNoaWV2ZW1lbnRzLm1wMycsCiAgJy4vb3dsLWNoZXN0Lm1wMycsCiAgJy4vb3dsLWRhZC5tcDMnLAogICcuL293bC1zdHVkaW8ubXAzJywKICAnLi9vd2wtc3RhZ2UtZHJhdy5tcDMnLAogICcuL293bC1zdGFnZS1xdXJhbi5tcDMnLAogICcuL293bC1zdGFnZS1wdXp6bGUubXAzJywKICAnLi9vd2wtc3RhZ2UtcHJheWVyLm1wMycsCiAgJy4vb3dsLXN0YWdlLXRoaW5rLm1wMycsCiAgJy4vb3dsLXN0YWdlLWNvb3AubXAzJywKICAnLi9uYXNoZWVkLXRhbGFhLm1wMycsCiAgJy4vbmFzaGVlZC1oYWJpYmkubXAzJywKICAnLi9uYXNoZWVkLXNhbGx1Lm1wMycsCiAgJy4vbmFzaGVlZC10YXliYS5tcDMnLAogICcuL25hc2hlZWQtcWFtYXIubXAzJywKICAnLi9uYXNoZWVkLW5hYmlzYWxhbS5tcDMnLAogICcuL25hc2hlZWQtbWF3bGF5YS5tcDMnLAogICcuL25hc2hlZWQtbGFtbWEubXAzJywKICAnLi9uYXNoZWVkLW1hbnNhbGxheXQubXAzJywKXTsKc2VsZi5hZGRFdmVudExpc3RlbmVyKCdpbnN0YWxsJywgZnVuY3Rpb24gKGUpIHsKICBlLndhaXRVbnRpbCgKICAgIGNhY2hlcy5vcGVuKENBQ0hFKS50aGVuKGZ1bmN0aW9uIChjKSB7IHJldHVybiBjLmFkZEFsbChDT1JFKTsgfSkuY2F0Y2goZnVuY3Rpb24gKCkge30pCiAgICAgIC50aGVuKGZ1bmN0aW9uICgpIHsgcmV0dXJuIHNlbGYuc2tpcFdhaXRpbmcoKTsgfSkKICApOwp9KTsKc2VsZi5hZGRFdmVudExpc3RlbmVyKCdhY3RpdmF0ZScsIGZ1bmN0aW9uIChlKSB7CiAgZS53YWl0VW50aWwoCiAgICBjYWNoZXMua2V5cygpLnRoZW4oZnVuY3Rpb24gKGtleXMpIHsKICAgICAgcmV0dXJuIFByb21pc2UuYWxsKGtleXMubWFwKGZ1bmN0aW9uIChrKSB7IHJldHVybiBrID09PSBDQUNIRSA/IG51bGwgOiBjYWNoZXMuZGVsZXRlKGspOyB9KSk7CiAgICB9KS50aGVuKGZ1bmN0aW9uICgpIHsgcmV0dXJuIHNlbGYuY2xpZW50cy5jbGFpbSgpOyB9KQogICk7Cn0pOwpzZWxmLmFkZEV2ZW50TGlzdGVuZXIoJ2ZldGNoJywgZnVuY3Rpb24gKGUpIHsKICBpZiAoZS5yZXF1ZXN0Lm1ldGhvZCAhPT0gJ0dFVCcpIHJldHVybjsKICBlLnJlc3BvbmRXaXRoKAogICAgY2FjaGVzLm1hdGNoKGUucmVxdWVzdCkudGhlbihmdW5jdGlvbiAoaGl0KSB7CiAgICAgIHJldHVybiBoaXQgfHwgZmV0Y2goZS5yZXF1ZXN0KS50aGVuKGZ1bmN0aW9uIChyZXMpIHsKICAgICAgICB2YXIgY29weSA9IHJlcy5jbG9uZSgpOwogICAgICAgIGNhY2hlcy5vcGVuKENBQ0hFKS50aGVuKGZ1bmN0aW9uIChjKSB7IGMucHV0KGUucmVxdWVzdCwgY29weSk7IH0pLmNhdGNoKGZ1bmN0aW9uICgpIHt9KTsKICAgICAgICByZXR1cm4gcmVzOwogICAgICB9KTsKICAgIH0pCiAgKTsKfSk7Cg==').catch(function(){}); }catch(e){} }
 </script>
 </body>
 </html>
